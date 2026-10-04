@@ -181,6 +181,7 @@ app.get('/api/rates/history', (req, res) => {
 app.get('/api/config', (req, res) => {
   let bank = {};
   try { bank = JSON.parse(getSetting('bank_details')); } catch {}
+  if (!bank || typeof bank !== 'object') bank = {};
   res.json({ dealerPhone: getSetting('dealer_phone') || '', bank });
 });
 
