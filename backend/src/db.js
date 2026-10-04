@@ -123,6 +123,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_idem ON orders(user_id, idempotency
 // seed defaults
 const set = db.prepare('INSERT OR IGNORE INTO settings(key,value) VALUES (?,?)');
 set.run('duty_pct', '6');            // import duty
+set.run('cash_gold_rate', '0');      // dealer's own cash rate, 0 = not published
+set.run('cash_silver_rate', '0');
 set.run('gst_pct', '3');
 set.run('global_spread_gold', '0');  // INR per 10g adjustment to track MCX
 set.run('global_spread_silver', '0');

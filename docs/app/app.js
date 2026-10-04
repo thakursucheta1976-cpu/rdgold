@@ -15,8 +15,10 @@ const esc = s => String(s == null ? '' : s)
 let token   = localStorage.getItem('rdgold.token') || null;
 let me      = null;
 let snap    = null;     // last rates snapshot
-let prevBuy = {};       // per product, for tick arrows
+let prevBuy = {};       // per product, last seen buy price
+let dirBuy  = {};       // per product, direction of the last move
 let ws = null, wsTimer = null, registerMode = false;
+let lastTick = 0, watchdog = null;
 
 /* ---------------- api ---------------- */
 async function api(path, { method = 'GET', body, auth = true } = {}) {
@@ -111,16 +113,26 @@ function connect() {
   ws.onmessage = ev => {
     try {
       const m = JSON.parse(ev.data);
-      if (m && m.products) paintRates(m);
-      else if (m && m.type === 'alert') note('ratemsg', m.message || 'Rate alert triggered.', 'ok');
+      // the server wraps everything as {type, data}
+      const body = (m && m.data) ? m.data : m;
+      if (m && m.type === 'alert') {
+        const a = body || {};
+        note('ratemsg', `${a.product || 'Rate'} crossed ${fmt(a.target)} — now ${fmt(a.rate)}.`, 'ok');
+        return;
+      }
+      if (body && body.products) { lastTick = Date.now(); paintRates(body); }
     } catch {}
   };
   ws.onclose = () => { badge('offline'); clearTimeout(wsTimer); wsTimer = setTimeout(connect, 3000); };
   ws.onerror = () => { try { ws.close(); } catch {} };
   pollOnce();
+  clearInterval(watchdog);
+  watchdog = setInterval(() => {
+    if (Date.now() - lastTick > 8000) pollOnce();   // socket quiet → ask over HTTP
+  }, 4000);
 }
 function pollFallback() { pollOnce(); clearTimeout(wsTimer); wsTimer = setTimeout(pollFallback, 2000); }
-async function pollOnce() { try { paintRates(await api('/api/rates')); } catch {} }
+async function pollOnce() { try { const r = await api('/api/rates'); lastTick = Date.now(); paintRates(r); } catch {} }
 
 function badge(state) {
   const b = $('badge');
@@ -134,16 +146,25 @@ function paintRates(d) {
   const gstPct = d.gstPct;
   $('ratecard').innerHTML = (d.products || []).map(p => {
     const prev = prevBuy[p.code];
-    const arrow = (prev == null || p.buy === prev) ? '' : (p.buy > prev ? ' <span class="up">▲</span>' : ' <span class="dn">▼</span>');
+    // green when the rate went up, red when it dropped; colour stays until it moves again
+    let dir = dirBuy[p.code] || '';
+    if (prev != null && p.buy !== prev) dir = p.buy > prev ? 'up' : 'dn';
+    dirBuy[p.code] = dir;
     prevBuy[p.code] = p.buy;
+    const arrow = dir === 'up' ? ' ▲' : dir === 'dn' ? ' ▼' : '';
     const oz = p.spotUsd ? '$' + p.spotUsd.toFixed(2) + '/oz' : '';
+    const cash = p.cash
+      ? `<div class="sm" style="margin-top:4px;font-variant-numeric:tabular-nums">
+           <span class="muted">cash</span> <b>${fmt(p.cash)}</b></div>`
+      : '';
     return `<div class="rate row">
       <div class="nm">${esc(p.name)}<small>per ${esc(p.unit)} · sell ${fmt(p.sell)}</small>
         <small>${oz}</small></div>
       <div style="text-align:right">
-        <div class="px">${fmt(p.buy)}${arrow}<small>you buy · ex-GST</small></div>
+        <div class="px ${dir}">${fmt(p.buy)}${arrow}<small class="muted">you buy · ex-GST</small></div>
         <div class="sm" style="margin-top:4px;color:var(--gold-soft);font-variant-numeric:tabular-nums">
           ${fmt(p.buyWithGst)} <span class="muted">inc ${gstPct}% GST</span></div>
+        ${cash}
         <div class="btn2" style="margin-top:8px">
           <button class="btn gold" style="padding:8px" data-buy="${esc(p.code)}">Buy</button>
           <button class="btn" style="padding:8px" data-sell="${esc(p.code)}">Sell</button>
@@ -342,6 +363,8 @@ async function loadAdmin() {
       </div>`).join('') : '<div class="muted sm">No orders.</div>';
 
     const sv = settings || {};
+    $('adm-cg').value   = (sv.cash_gold_rate && Number(sv.cash_gold_rate) > 0) ? sv.cash_gold_rate : '';
+    $('adm-cs').value   = (sv.cash_silver_rate && Number(sv.cash_silver_rate) > 0) ? sv.cash_silver_rate : '';
     $('adm-sg').value   = sv.global_spread_gold ?? '';
     $('adm-ss').value   = sv.global_spread_silver ?? '';
     $('adm-duty').value = sv.duty_pct ?? '';
@@ -379,6 +402,9 @@ $('adm-save').onclick = async () => {
     const map = { 'adm-sg': 'global_spread_gold', 'adm-ss': 'global_spread_silver',
                   'adm-duty': 'duty_pct', 'adm-gst': 'gst_pct' };
     for (const k in map) if ($(k).value !== '') body[map[k]] = $(k).value;
+    // blank means "stop showing a cash rate", so send 0 rather than skipping it
+    body.cash_gold_rate   = $('adm-cg').value === '' ? 0 : $('adm-cg').value;
+    body.cash_silver_rate = $('adm-cs').value === '' ? 0 : $('adm-cs').value;
     await api('/api/admin/settings', { method: 'PATCH', body });
     note('admmsg', 'Settings saved.', 'ok');
   } catch (e) { note('admmsg', e.message); }

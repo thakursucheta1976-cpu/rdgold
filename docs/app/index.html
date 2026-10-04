@@ -36,7 +36,8 @@ header b{font-size:17px;letter-spacing:.2px}
 .rate{padding:13px 0;border-bottom:1px solid var(--line)}
 .rate:last-child{border-bottom:0}
 .rate .nm{font-size:14px} .rate .nm small{display:block;color:var(--mut);font-size:11.5px}
-.px{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums;text-align:right;line-height:1.25}
+.px{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums;text-align:right;line-height:1.25;transition:color .2s}
+.px.up{color:var(--grn)} .px.dn{color:var(--red)}
 .px small{display:block;font-size:11px;color:var(--mut);font-weight:400}
 .up{color:var(--grn)} .dn{color:var(--red)}
 .btn{display:block;width:100%;padding:13px;border-radius:11px;border:1px solid var(--line);
@@ -174,6 +175,8 @@ nav button.on{color:var(--gold-soft)}
         <span>Market</span>
         <button class="btn" style="width:auto;padding:8px 16px" id="adm-market">—</button>
       </div>
+      <label>Cash gold rate (₹ per 10g) — blank to hide</label><input id="adm-cg" inputmode="decimal">
+      <label>Cash silver rate (₹ per kg) — blank to hide</label><input id="adm-cs" inputmode="decimal">
       <label>Gold spread (₹ per 10g)</label><input id="adm-sg" inputmode="decimal">
       <label>Silver spread (₹ per kg)</label><input id="adm-ss" inputmode="decimal">
       <label>Import duty %</label><input id="adm-duty" inputmode="decimal">

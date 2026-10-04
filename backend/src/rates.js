@@ -154,7 +154,16 @@ export function snapshot(user = null) {
                minQty: p.min_qty, maxQty: p.max_qty,
                buy: r ? r.buyRate : null, sell: r ? r.sellRate : null,
                buyWithGst: r ? Math.round(r.buyRate * (1 + gst / 100)) : null,
-               spotUsd: p.metal === 'gold' ? state.xauusd : state.xagusd };
+               spotUsd: p.metal === 'gold' ? state.xauusd : state.xagusd,
+               // the dealer's own cash rate, typed in by the admin. 0 means not published.
+               cash: (() => {
+                 const v = parseFloat(getSetting(
+                   p.metal === 'gold' ? 'cash_gold_rate' : 'cash_silver_rate') || '0');
+                 if (!(v > 0)) return null;
+                 // the admin types one rate for 999 purity; lower purities scale from it
+                 const per = p.metal === 'gold' ? p.unit_grams / 10 : p.unit_grams / 1000;
+                 return Math.round(v * per * (p.purity / 0.999));
+               })() };
     })
   };
 }

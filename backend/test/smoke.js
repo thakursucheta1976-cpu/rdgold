@@ -200,6 +200,30 @@ ok('silver carries its own USD spot', s9.spotUsd > 0 && s9.spotUsd !== g9.spotUs
 ok('silver priced separately from gold', s9.buy > 0 && s9.buy !== g9.buy);
 ok('movement is reported', gq.moved && typeof gq.moved.goldMsAgo === 'number', `${gq.moved && gq.moved.goldMsAgo}ms`);
 
+// ---- dealer's own cash rate, set by the admin ----
+let c0 = await j(await get('/rates'));
+ok('cash rate hidden until published', c0.products.every(p => p.cash === null));
+
+await patch('/admin/settings', { cash_gold_rate: 101500, cash_silver_rate: 152000 }, adm.token);
+let c1 = await j(await get('/rates'));
+let cg = c1.products.find(p => p.code === 'GOLD999');
+let cs = c1.products.find(p => p.code === 'SILVER999');
+ok('cash gold shows per 10g', cg.cash === 101500, `got ${cg.cash}`);
+ok('cash silver shows per kg', cs.cash === 152000, `got ${cs.cash}`);
+let c995 = c1.products.find(p => p.code === 'GOLD995');
+ok('cash scales down for 995 purity', c995.cash < cg.cash && c995.cash > cg.cash * 0.99,
+   `999 ${cg.cash} vs 995 ${c995.cash}`);
+
+let badCash = await patch('/admin/settings', { cash_gold_rate: 'not-a-number' }, adm.token);
+ok('bad cash rate rejected', badCash.status === 400);
+
+let notAdminCash = await patch('/admin/settings', { cash_gold_rate: 1 }, tok);
+ok('only admins set the cash rate', notAdminCash.status === 403);
+
+await patch('/admin/settings', { cash_gold_rate: 0, cash_silver_rate: 0 }, adm.token);
+let c2 = await j(await get('/rates'));
+ok('cash rate can be switched off', c2.products.every(p => p.cash === null));
+
 // ---- rate freshness is reported, not hidden ----
 let fr = await j(await get('/rates'));
 ok('spot age reported', typeof fr.spotAgeMs === 'number' && fr.spotAgeMs < 10000, `age=${fr.spotAgeMs}ms`);

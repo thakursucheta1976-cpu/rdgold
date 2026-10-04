@@ -353,7 +353,8 @@ app.get('/api/admin/settings', auth('admin'), (req, res) => {
   const rows = db.prepare('SELECT * FROM settings').all();
   res.json(Object.fromEntries(rows.map(r => [r.key, r.value])));
 });
-const NUMERIC_SETTINGS = ['duty_pct', 'gst_pct', 'global_spread_gold', 'global_spread_silver'];
+const NUMERIC_SETTINGS = ['duty_pct', 'gst_pct', 'global_spread_gold', 'global_spread_silver',
+                          'cash_gold_rate', 'cash_silver_rate'];
 const ALLOWED_SETTINGS = [...NUMERIC_SETTINGS, 'market_open', 'bank_details'];
 app.patch('/api/admin/settings', auth('admin'), (req, res) => {
   for (const [k, v] of Object.entries(req.body || {})) {
