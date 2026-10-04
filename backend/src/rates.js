@@ -424,9 +424,17 @@ async function pollIbja() {
 
 // the Indian rate right now: benchmark level + live international movement
 export function indianLive(metal) {
-  const o = metal === 'gold' ? state.ibja?.offsetGold : state.ibja?.offsetSilver;
   const intl = intlInr(metal);
-  if (o == null || intl == null) return null;
+  if (intl == null || !state.ibja) return null;
+  let o = metal === 'gold' ? state.ibja.offsetGold : state.ibja.offsetSilver;
+  if (o == null) {
+    // the benchmark may have arrived before the international feed did —
+    // lock the gap the first moment both are in hand
+    const bench = metal === 'gold' ? state.ibja.gold999 : state.ibja.silver;
+    if (bench == null) return null;
+    o = bench - intl;
+    if (metal === 'gold') state.ibja.offsetGold = o; else state.ibja.offsetSilver = o;
+  }
   if (Date.now() - (state.ibja?.at || 0) > 36 * 3600_000) return null;   // benchmark too old
   return intl + o;
 }
