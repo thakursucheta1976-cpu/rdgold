@@ -462,5 +462,15 @@ ok('an empty page returns nothing', parseIbja('') === null);
 ok('a silly number is thrown away',
    parseIbja('<div>999 Purity 7 (1 Gram)</div>').gold999 === null);
 
+// ---- an old 'mcx' setting must not strand us on the international price ----
+await patch('/admin/settings', { price_basis: 'mcx' }, adm.token);
+__setMcxForTest({ gold: null, silver: null, at: 0 });     // exchange unreachable
+const { __setIbjaForTest } = await import('../src/rates.js');
+__setIbjaForTest({ gold999: 148140, silver: 221954, at: Date.now(), offsetGold: null, offsetSilver: null });
+let stranded = await j(await get('/rates'));
+ok('with MCX down the Indian benchmark is used, not international spot',
+   stranded.sources.basis === 'india', stranded.sources.basis);
+await patch('/admin/settings', { price_basis: 'auto' }, adm.token);
+
 console.log(fails === 0 ? '\nALL TESTS PASSED' : `\n${fails} FAILURES`);
 process.exit(fails === 0 ? 0 : 1);

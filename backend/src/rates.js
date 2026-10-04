@@ -130,6 +130,7 @@ async function pollFx() {
 // otherwise international spot converted at the live USD/INR.
 // tests inject an exchange snapshot here instead of hitting the network
 export function __setMcxForTest(m) { state.mcx = m; state.mcxMovedAt = Date.now(); }
+export function __setIbjaForTest(b) { state.ibja = b; }
 
 export function priceBasis() {
   // auto = the exchange when we can reach it, otherwise international spot.
@@ -139,7 +140,9 @@ export function priceBasis() {
   if (want === 'spot') return 'spot';
   const mcxFresh = state.mcx && (Date.now() - state.mcx.at) < 10 * 60_000 && state.mcx.gold;
   if (mcxFresh && (want === 'auto' || want === 'mcx')) return 'mcx';
-  if ((want === 'auto' || want === 'india') && indianLive('gold') != null) return 'india';
+  // 'mcx' asked for but the exchange is unreachable: use the Indian benchmark
+  // before falling all the way back to the international price
+  if ((want === 'auto' || want === 'india' || want === 'mcx') && indianLive('gold') != null) return 'india';
   return 'spot';
 }
 
