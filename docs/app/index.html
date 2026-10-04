@@ -126,8 +126,6 @@ nav button.on{color:var(--gold-soft)}
       <label>Password</label><input id="f-pass" type="password" autocomplete="current-password">
       <div id="regOnly2" class="hide">
         <label>City</label><input id="f-city" autocomplete="address-level2">
-        <label>PAN (optional)</label><input id="f-pan">
-        <label>GSTIN (optional)</label><input id="f-gst">
       </div>
       <div style="height:14px"></div>
       <button class="btn gold" id="b-auth">Sign in</button>
@@ -145,11 +143,10 @@ nav button.on{color:var(--gold-soft)}
   <!-- ORDERS -->
   <section id="v-orders" class="hide">
     <div class="card">
-      <div class="row"><span class="tag">Open exposure</span><b id="expo" class="big" style="font-size:20px">—</b></div>
-      <div class="kv"><span>Margin limit</span><span id="mlimit">—</span></div>
-      <div id="positions" class="list" style="margin-top:6px"></div>
+      <h2>Your orders</h2>
+      <p class="sm muted" style="margin:0 0 10px">Everything you booked with us on the phone.</p>
+      <div id="orderlist" class="list"></div>
     </div>
-    <div class="card"><h2>Orders</h2><div id="orderlist" class="list"></div></div>
   </section>
 
   <!-- ALERTS -->
@@ -182,8 +179,6 @@ nav button.on{color:var(--gold-soft)}
       <label>Full name</label><input id="p-name">
       <label>City</label><input id="p-city">
       <label>Email</label><input id="p-email" inputmode="email">
-      <label>PAN</label><input id="p-pan">
-      <label>GST number</label><input id="p-gst">
       <label>Address</label><input id="p-address">
       <div style="height:12px"></div>
       <button class="btn gold" id="p-save">Save details</button>
@@ -225,18 +220,30 @@ nav button.on{color:var(--gold-soft)}
       <div id="adm-users" class="list" style="margin-top:8px"></div>
     </div>
     <div class="card"><h2>Sign-in activity</h2><div id="adm-logins" class="list"></div></div>
-    <div class="card"><h2>All orders</h2><div id="adm-orders" class="list"></div></div>
     <div class="card">
-      <h2>Controls</h2>
-      <div class="row" style="margin:6px 0 12px">
-        <span>Market</span>
-        <button class="btn" style="width:auto;padding:8px 16px" id="adm-market">—</button>
-      </div>
-      <label>Dealer phone (clients call this)</label><input id="adm-phone" inputmode="tel" placeholder="+919876543210">
-      <label>Gold spread (₹ per 10g)</label><input id="adm-sg" inputmode="decimal">
-      <label>Silver spread (₹ per kg)</label><input id="adm-ss" inputmode="decimal">
-      <label>Import duty %</label><input id="adm-duty" inputmode="decimal">
-      <label>GST %</label><input id="adm-gst" inputmode="decimal">
+      <h2>Book an order</h2>
+      <p class="sm muted" style="margin:0 0 10px">After you fix the price on the call, enter it here. The client sees it in their Orders tab.</p>
+      <label>Client</label><select id="bk-user"></select>
+      <label>Product</label><select id="bk-prod"></select>
+      <label>Side</label><select id="bk-side"><option value="buy">Client buys</option><option value="sell">Client sells</option></select>
+      <label>Quantity</label><input id="bk-qty" inputmode="decimal" value="1">
+      <label>Rate agreed on the call (₹ per unit)</label><input id="bk-rate" inputmode="decimal">
+      <label>Note (optional)</label><input id="bk-note" placeholder="booked on call">
+      <div style="height:12px"></div>
+      <button class="btn gold" id="bk-save">Book it</button>
+    </div>
+
+    <div class="card">
+      <div class="row"><h2 style="margin:0">All orders</h2><span class="sm muted" id="adm-ordcount">—</span></div>
+      <div id="adm-orders" class="list" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h2>Settings</h2>
+      <label>Your phone — clients tap this to call you</label><input id="adm-phone" inputmode="tel" placeholder="+919876543210">
+      <label>Your margin on gold (₹ per 10g, added to the live rate)</label><input id="adm-sg" inputmode="decimal">
+      <label>Your margin on silver (₹ per kg)</label><input id="adm-ss" inputmode="decimal">
+      <label>Import duty % (used to work out the landed rate)</label><input id="adm-duty" inputmode="decimal">
+      <label>GST % (shown in the With GST column)</label><input id="adm-gst" inputmode="decimal">
       <div style="height:12px"></div>
       <button class="btn gold" id="adm-save">Save settings</button>
     </div>

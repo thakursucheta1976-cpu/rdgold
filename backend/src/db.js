@@ -128,7 +128,7 @@ set.run('cash_silver_rate', '0');
 set.run('gst_pct', '3');
 set.run('global_spread_gold', '0');  // INR per 10g adjustment to track MCX
 set.run('global_spread_silver', '0');
-set.run('market_open', 'true');      // admin kill-switch
+set.run('market_open', 'true');
 set.run('dealer_phone', '');         // number clients call / WhatsApp to book
 
 const seedProducts = db.prepare(`INSERT OR IGNORE INTO products
@@ -138,6 +138,10 @@ seedProducts.run('GOLD999', 'Gold 999 (10g)', 'gold', 0.999, '10g', 10, 1, 1000,
 seedProducts.run('GOLD995', 'Gold 995 (10g)', 'gold', 0.995, '10g', 10, 1, 1000, 100, 80);
 seedProducts.run('SILVER999', 'Silver 999 (1kg)', 'silver', 0.999, '1kg', 1000, 1, 500, 300, 200);
 
+
+// Orders are booked on the phone now, so there is no kill-switch to flip:
+// the market is always open as far as the app is concerned.
+db.exec("UPDATE settings SET value='true' WHERE key='market_open'");
 
 // --- migrations: columns added after the first release ---
 const cols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);

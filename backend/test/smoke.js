@@ -85,11 +85,11 @@ await new Promise(res => setTimeout(res, 3000));
 let als = await j(await get('/alerts', tok));
 ok('alert fired', als.find(a=>a.id===al.id).triggered === 1);
 
-// market close kill-switch
-await patch('/admin/settings', {market_open:'false'}, adm.token);
-let closed = await post('/quote', {productCode:'GOLD999', side:'buy', qty:1}, tok);
-ok('market-closed blocks quotes', closed.status === 423);
-await patch('/admin/settings', {market_open:'true'}, adm.token);
+// the market kill-switch is gone: the setting can no longer be flipped from the API
+let killSwitch = await patch('/admin/settings', {market_open:'false'}, adm.token);
+ok('market_open can no longer be changed', killSwitch.status === 400);
+let stillOpen = await j(await get('/rates'));
+ok('market stays open', stillOpen.marketOpen === true);
 
 // per-client premium
 await patch('/admin/users/'+uid, {premium_gold: 500}, adm.token);
@@ -329,6 +329,29 @@ let oldTok = await get('/me', sameDev.token);
 ok('the old phone is signed out', oldTok.status === 401);
 let newTok = await get('/me', afterReset.token);
 ok('the new phone works', newTok.status === 200);
+
+// ---- the dealer books orders for clients ----
+let bk = await j(await post('/admin/orders', { userId: uid, productCode:'GOLD999', side:'buy',
+  qty: 2, rate: 118900, note:'booked on call' }, adm.token));
+ok('admin books an order for a client', !!bk.id);
+
+const ctok = afterReset.token;   // the trader's current token after the device reset
+let clientOrders = await j(await get('/orders', ctok));
+const booked = clientOrders.find(o => o.id === bk.id);
+ok('the client sees it in their orders', !!booked && booked.qty === 2 && booked.status === 'executed');
+
+let badQty = await post('/admin/orders', { userId: uid, productCode:'GOLD999', side:'buy', qty: 0, rate: 1 }, adm.token);
+ok('zero quantity rejected', badQty.status === 400);
+let badProd = await post('/admin/orders', { userId: uid, productCode:'NOPE', side:'buy', qty: 1, rate: 1 }, adm.token);
+ok('unknown product rejected', badProd.status === 400);
+let badUser = await post('/admin/orders', { userId: 999999, productCode:'GOLD999', side:'buy', qty: 1, rate: 1 }, adm.token);
+ok('unknown client rejected', badUser.status === 400);
+let notAdmin = await post('/admin/orders', { userId: uid, productCode:'GOLD999', side:'buy', qty: 1, rate: 1 }, ctok);
+ok('only admins can book for a client', notAdmin.status === 403);
+
+await patch('/admin/orders/'+bk.id, { status:'delivered' }, adm.token);
+let after = await j(await get('/orders', ctok));
+ok('status update reaches the client', after.find(o => o.id === bk.id).status === 'delivered');
 
 console.log(fails === 0 ? '\nALL TESTS PASSED' : `\n${fails} FAILURES`);
 process.exit(fails === 0 ? 0 : 1);

@@ -390,9 +390,32 @@ app.get('/api/admin/orders', auth('admin'), (req, res) =>
   res.json(db.prepare(`SELECT o.*, u.name user_name, u.phone, p.code product_code FROM orders o
     JOIN users u ON u.id=o.user_id JOIN products p ON p.id=o.product_id ORDER BY o.id DESC LIMIT 500`).all()));
 
+// the dealer books what was agreed on the call, for any client
+app.post('/api/admin/orders', auth('admin'), (req, res) => {
+  const { userId, productCode, side, qty, rate, status, note } = req.body || {};
+  const u = db.prepare('SELECT id FROM users WHERE id=?').get(userId);
+  if (!u) return res.status(400).json({ error: 'pick a client' });
+  const p = db.prepare('SELECT * FROM products WHERE code=? AND active=1').get(String(productCode || ''));
+  if (!p) return res.status(400).json({ error: 'pick a product' });
+  if (!['buy', 'sell'].includes(side)) return res.status(400).json({ error: 'side must be buy or sell' });
+  const q = Number(qty), r = Number(rate);
+  if (!(q > 0)) return res.status(400).json({ error: 'quantity must be more than 0' });
+  if (!(r > 0)) return res.status(400).json({ error: 'rate must be more than 0' });
+  const st = status || 'executed';
+  if (!['executed', 'pending', 'delivered'].includes(st)) return res.status(400).json({ error: 'bad status' });
+  if (note && BAD_CHARS.test(String(note))) return res.status(400).json({ error: 'invalid characters in note' });
+  const gstPct = parseFloat(getSetting('gst_pct') || '3');
+  const gst = side === 'buy' ? Math.round(r * q * gstPct / 100) : 0;
+  const info = db.prepare(`INSERT INTO orders(user_id,product_id,side,type,qty,rate,status,
+      gst_amount,total_amount,note,executed_at)
+      VALUES (?,?,?,'market',?,?,?,?,?,?,datetime('now'))`)
+    .run(u.id, p.id, side, q, r, st, gst, Math.round(r * q) + gst, (note || 'booked on call').slice(0, 200));
+  res.json({ ok: true, id: info.lastInsertRowid });
+});
+
 app.patch('/api/admin/orders/:id', auth('admin'), (req, res) => {
   const { status } = req.body || {};
-  if (!['executed', 'cancelled', 'rejected', 'delivered'].includes(status)) return res.status(400).json({ error: 'bad status' });
+  if (!['pending', 'executed', 'cancelled', 'rejected', 'delivered'].includes(status)) return res.status(400).json({ error: 'bad status' });
   db.prepare('UPDATE orders SET status=? WHERE id=?').run(status, req.params.id);
   res.json({ ok: true });
 });
@@ -419,12 +442,11 @@ app.get('/api/admin/settings', auth('admin'), (req, res) => {
 });
 const NUMERIC_SETTINGS = ['duty_pct', 'gst_pct', 'global_spread_gold', 'global_spread_silver',
                           'cash_gold_rate', 'cash_silver_rate'];
-const ALLOWED_SETTINGS = [...NUMERIC_SETTINGS, 'market_open', 'dealer_phone'];
+const ALLOWED_SETTINGS = [...NUMERIC_SETTINGS, 'dealer_phone'];
 app.patch('/api/admin/settings', auth('admin'), (req, res) => {
   for (const [k, v] of Object.entries(req.body || {})) {
     if (!ALLOWED_SETTINGS.includes(k)) return res.status(400).json({ error: `unknown setting ${k}` });
     if (NUMERIC_SETTINGS.includes(k) && !Number.isFinite(Number(v))) return res.status(400).json({ error: `bad ${k}` });
-    if (k === 'market_open' && !['true', 'false'].includes(String(v))) return res.status(400).json({ error: 'bad market_open' });
     if (k === 'dealer_phone') {
       const t = String(v).trim();
       if (t && !/^\+?[0-9][0-9 -]{6,18}$/.test(t)) return res.status(400).json({ error: 'bad dealer_phone' });

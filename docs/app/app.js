@@ -87,7 +87,7 @@ $('b-auth').onclick = async () => {
   try {
     const body = registerMode
       ? { phone, password, deviceId: DEVICE_ID, name: $('f-name').value.trim(),
-          city: $('f-city').value.trim(), pan: $('f-pan').value.trim(), gst: $('f-gst').value.trim() }
+          city: $('f-city').value.trim() }
       : { phone, password, deviceId: DEVICE_ID };
     const r = await api(registerMode ? '/api/register' : '/api/login', { method: 'POST', body, auth: false });
     token = r.token; localStorage.setItem('rdgold.token', token);
@@ -155,6 +155,16 @@ function badge(state) {
   b.className = 'badge' + (state === 'live' ? ' live' : state === 'stale' ? ' stale' : '');
   b.textContent = state;
 }
+// the server stores times in UTC; everyone here reads IST
+const ist = (t, withTime = true) => {
+  if (!t) return '—';
+  const d = new Date(String(t).replace(' ', 'T').replace(/Z?$/, 'Z'));
+  if (isNaN(d)) return String(t);
+  return d.toLocaleString('en-IN', withTime
+    ? { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }
+    : { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' });
+};
+
 const num = n => n == null ? '—' : Math.round(n).toLocaleString('en-IN');
 
 function paintRates(d) {
@@ -220,9 +230,9 @@ function openTrade(code, side) {
     <div class="msg warn" style="margin-top:10px">
       Indicative only. The rate is fixed with us on the call, not here.</div>
     ${DEALER_PHONE
-      ? `<a class="btn gold" id="sh-call" href="tel:${esc(DEALER_PHONE)}"
-             style="text-align:center;text-decoration:none">Call to book</a>`
-      : `<div class="msg err">Dealer phone is not set yet.</div>`}
+      ? `<a class="btn gold" id="sh-call" href="tel:${esc(DEALER_PHONE.replace(/[^0-9+]/g, ''))}"
+             style="text-align:center;text-decoration:none">Call ${esc(DEALER_PHONE)}</a>`
+      : `<div class="msg err">Phone number not set yet. Please call us as usual.</div>`}
     <div style="height:9px"></div>
     ${DEALER_PHONE
       ? `<a class="btn" id="sh-wa" target="_blank" rel="noopener"
@@ -246,24 +256,19 @@ function openTrade(code, side) {
 /* ---------------- orders ---------------- */
 async function loadOrders() {
   try {
-    const [pos, orders] = await Promise.all([api('/api/position'), api('/api/orders')]);
-    $('expo').textContent   = fmt(pos.openExposure);
-    $('mlimit').textContent = fmt(pos.marginLimit);
-    $('positions').innerHTML = (pos.positions || []).length
-      ? pos.positions.map(p => `<div class="it row"><span>${esc(p.name)}</span>
-          <span class="${p.net_qty >= 0 ? 'up' : 'dn'}">${p.net_qty > 0 ? '+' : ''}${p.net_qty}</span></div>`).join('')
-      : '<div class="muted sm">No open position.</div>';
-
+    const orders = await api('/api/orders');
     const list = Array.isArray(orders) ? orders : (orders.orders || []);
     $('orderlist').innerHTML = list.length ? list.map(o => {
       const cls = o.status === 'executed' || o.status === 'delivered' ? 'g'
-                : o.status === 'cancelled' ? 'r' : '';
+                : o.status === 'cancelled' || o.status === 'rejected' ? 'r' : '';
       return `<div class="it">
         <div class="row"><b>${esc(o.productName || o.product)}</b><span class="pill ${cls}">${esc(o.status)}</span></div>
         <div class="row muted sm" style="margin-top:3px">
-          <span>${esc(o.side)} · ${esc(o.type)} · ${o.qty} @ ${fmt(o.rate)}</span>
-          <span>${fmt(o.total || o.rate * o.qty)}</span></div></div>`;
-    }).join('') : '<div class="muted sm">No orders yet.</div>';
+          <span>${esc(o.side)} · ${o.qty} @ ${fmt(o.rate)}</span>
+          <span>${fmt(o.total || o.rate * o.qty)}</span></div>
+        <div class="muted sm" style="margin-top:2px">${esc(ist(o.createdAt || o.created_at))}</div>
+      </div>`;
+    }).join('') : '<div class="muted sm">Nothing booked yet. Call us to book at the live rate.</div>';
   } catch (e) { $('orderlist').innerHTML = `<div class="muted sm">${esc(e.message)}</div>`; }
 }
 
@@ -303,15 +308,13 @@ function loadProfile() {
   const u = me || {};
   $('p-phone').textContent  = u.phone  || '—';
   $('p-margin').textContent = fmt(u.marginLimit);
-  $('p-since').textContent  = (u.createdAt || '').slice(0, 10) || '—';
+  $('p-since').textContent  = ist(u.createdAt, false);
   const st = $('p-status');
   st.textContent = u.status || '—';
   st.className = 'pill' + (u.status === 'active' ? ' g' : u.status === 'blocked' ? ' r' : '');
   $('p-name').value    = u.name    || '';
   $('p-city').value    = u.city    || '';
   $('p-email').value   = u.email   || '';
-  $('p-pan').value     = u.pan     || '';
-  $('p-gst').value     = u.gst     || '';
   $('p-address').value = u.address || '';
 }
 
@@ -320,8 +323,7 @@ $('p-save').onclick = async () => {
   try {
     me = await api('/api/me', { method: 'PATCH', body: {
       name: $('p-name').value.trim(), city: $('p-city').value.trim(),
-      email: $('p-email').value.trim(), pan: $('p-pan').value.trim(),
-      gst: $('p-gst').value.trim(), address: $('p-address').value.trim() } });
+      email: $('p-email').value.trim(), address: $('p-address').value.trim() } });
     note('profmsg', 'Details saved.', 'ok');
   } catch (e) { note('profmsg', e.message); }
   finally { $('p-save').disabled = false; }
@@ -358,8 +360,8 @@ async function loadAdmin() {
           <span>${esc(u.phone)}${u.kyc_city ? ' · ' + esc(u.kyc_city) : ''}</span>
           <span>limit ${fmt(u.margin_limit)}</span></div>
         <div class="row sm" style="margin-top:3px">
-          <span class="muted">joined ${esc((u.created_at || '').slice(0, 16))}</span>
-          <span class="muted">${u.last_login ? 'last in ' + esc(String(u.last_login).replace('T',' ').slice(0,16)) : 'never signed in'}${u.login_count ? ' · ' + u.login_count + 'x' : ''}</span></div>
+          <span class="muted">joined ${esc(ist(u.created_at, false))}</span>
+          <span class="muted">${u.last_login ? 'last in ' + esc(ist(u.last_login)) : 'never signed in'}${u.login_count ? ' · ' + u.login_count + 'x' : ''}</span></div>
         <div class="row sm" style="margin-top:3px">
           <span class="muted">${u.device_id ? 'locked to ' + esc(u.device_name || 'a phone') : 'no phone linked yet'}</span>
           ${u.device_id ? `<button class="btn" style="width:auto;padding:4px 10px;font-size:12px" data-act="device" data-id="${u.id}">Reset phone</button>` : ''}
@@ -379,19 +381,44 @@ async function loadAdmin() {
         <div class="row"><b>${esc(l.name || l.phone)}</b>
           <span class="pill ${l.ok ? 'g' : 'r'}">${l.ok ? 'signed in' : 'failed'}</span></div>
         <div class="row muted sm" style="margin-top:3px">
-          <span>${esc(l.phone)}</span><span>${esc((l.ts || '').replace('T', ' ').slice(0, 16))} UTC</span></div>
+          <span>${esc(l.phone)}</span><span>${esc(ist(l.ts))}</span></div>
         <div class="muted sm" style="margin-top:2px">${esc(l.ip || '')}</div>
       </div>`).join('') : '<div class="muted sm">No sign-ins recorded yet.</div>';
 
     const ol = Array.isArray(orders) ? orders : (orders.orders || []);
-    $('adm-orders').innerHTML = ol.length ? ol.slice(0, 50).map(o => `
-      <div class="it">
-        <div class="row"><b>${esc(o.productName || o.product_code || o.product)}</b>
-          <span class="pill">${esc(o.status)}</span></div>
+    $('adm-ordcount').textContent = ol.length + ' total';
+    $('adm-orders').innerHTML = ol.length ? ol.slice(0, 80).map(o => {
+      const cls = o.status === 'executed' || o.status === 'delivered' ? 'g'
+                : o.status === 'cancelled' || o.status === 'rejected' ? 'r' : '';
+      return `<div class="it">
+        <div class="row"><b>${esc(o.product_code || o.productName || o.product)}</b>
+          <span class="pill ${cls}">${esc(o.status)}</span></div>
         <div class="row muted sm" style="margin-top:3px">
-          <span>${esc(o.userName || o.phone || ('user ' + o.user_id))} · ${esc(o.side)} ${o.qty}</span>
-          <span>${fmt(o.total || o.total_amount || o.rate * o.qty)}</span></div>
-      </div>`).join('') : '<div class="muted sm">No orders.</div>';
+          <span>${esc(o.user_name || o.phone || ('client ' + o.user_id))} · ${esc(o.side)} ${o.qty} @ ${fmt(o.rate)}</span>
+          <span>${fmt(o.total_amount || o.rate * o.qty)}</span></div>
+        <div class="muted sm" style="margin-top:2px">${esc(ist(o.created_at))}${o.note ? ' · ' + esc(o.note) : ''}</div>
+        <div class="btn2" style="margin-top:8px">
+          <button class="btn" style="padding:6px;font-size:12.5px" data-ord="${o.id}" data-st="delivered">Delivered</button>
+          <button class="btn" style="padding:6px;font-size:12.5px" data-ord="${o.id}" data-st="pending">Pending</button>
+          <button class="btn" style="padding:6px;font-size:12.5px" data-ord="${o.id}" data-st="cancelled">Cancel</button>
+        </div>
+      </div>`;
+    }).join('') : '<div class="muted sm">No orders yet.</div>';
+
+    $('adm-orders').querySelectorAll('[data-ord]').forEach(b => b.onclick = async () => {
+      try {
+        await api('/api/admin/orders/' + b.dataset.ord, { method: 'PATCH', body: { status: b.dataset.st } });
+        await loadAdmin(); note('admmsg', 'Order updated.', 'ok');
+      } catch (e) { note('admmsg', e.message); }
+    });
+
+    // booking form: clients and products
+    $('bk-user').innerHTML = list.filter(u => u.role !== 'admin')
+      .map(u => `<option value="${u.id}">${esc(u.name || u.phone)} · ${esc(u.phone)}</option>`).join('')
+      || '<option value="">No clients yet</option>';
+    $('bk-prod').innerHTML = ((snap && snap.products) || [])
+      .map(p => `<option value="${esc(p.code)}">${esc(p.name)}</option>`).join('');
+    fillBookRate();
 
     const sv = settings || {};
     $('adm-cg').value   = (sv.cash_gold_rate && Number(sv.cash_gold_rate) > 0) ? sv.cash_gold_rate : '';
@@ -401,15 +428,6 @@ async function loadAdmin() {
     $('adm-ss').value   = sv.global_spread_silver ?? '';
     $('adm-duty').value = sv.duty_pct ?? '';
     $('adm-gst').value  = sv.gst_pct ?? '';
-    const open = String(sv.market_open) === 'true';
-    const mb = $('adm-market');
-    mb.textContent = open ? 'OPEN — tap to close' : 'CLOSED — tap to open';
-    mb.className = 'btn' + (open ? ' gold' : '');
-    mb.onclick = async () => {
-      try { await api('/api/admin/settings', { method: 'PATCH', body: { market_open: open ? 'false' : 'true' } });
-            note('admmsg', 'Market ' + (open ? 'closed' : 'opened') + '.', 'ok'); loadAdmin(); }
-      catch (e) { note('admmsg', e.message); }
-    };
     note('admmsg', '');
   } catch (e) { note('admmsg', e.message); }
 }
@@ -426,9 +444,37 @@ async function adminUser(id, act) {
     } else {
       await api('/api/admin/users/' + id, { method: 'PATCH', body: { status: act } });
     }
-    note('admmsg', 'Updated.', 'ok'); loadAdmin();
+    await loadAdmin(); note('admmsg', 'Updated.', 'ok');
   } catch (e) { note('admmsg', e.message); }
 }
+
+// prefill the rate box with the live rate for whatever product is selected
+function fillBookRate() {
+  const code = $('bk-prod').value;
+  const p = ((snap && snap.products) || []).find(x => x.code === code);
+  if (!p) return;
+  $('bk-rate').value = $('bk-side').value === 'buy' ? p.buy : p.sell;
+}
+$('bk-prod').onchange = fillBookRate;
+$('bk-side').onchange = fillBookRate;
+
+$('bk-save').onclick = async () => {
+  const body = {
+    userId: Number($('bk-user').value), productCode: $('bk-prod').value,
+    side: $('bk-side').value, qty: Number($('bk-qty').value),
+    rate: Number($('bk-rate').value), note: $('bk-note').value.trim() };
+  if (!body.userId) return note('admmsg', 'Pick a client first.');
+  if (!(body.qty > 0)) return note('admmsg', 'Quantity must be more than 0.');
+  if (!(body.rate > 0)) return note('admmsg', 'Enter the rate you agreed on the call.');
+  $('bk-save').disabled = true;
+  try {
+    await api('/api/admin/orders', { method: 'POST', body });
+    $('bk-note').value = '';
+    await loadAdmin();
+    note('admmsg', 'Order booked for the client.', 'ok');
+  } catch (e) { note('admmsg', e.message); }
+  finally { $('bk-save').disabled = false; }
+};
 
 $('adm-cash-save').onclick = async () => {
   $('adm-cash-save').disabled = true;
