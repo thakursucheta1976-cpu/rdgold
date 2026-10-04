@@ -1,0 +1,215 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RDgold</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Archivo:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: dark bullion-desk look; one gold accent, ticker strip, centered column */
+:root{
+  --bg:#0c0d10; --panel:#15161c; --line:#262830;
+  --gold:#d4af37; --gold-soft:#e8cc6a;
+  --fg:#ece9e0; --mut:#8d9099;
+  --grn:#39c377; --red:#e05c4f;
+  --disp:"Fraunces",Georgia,serif; --body:"Archivo",system-ui,sans-serif;
+  color-scheme:dark;
+}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);margin:0;padding-inline:16px}
+.wrap{max-width:960px;margin:0 auto}
+a{color:var(--gold)}
+/* ticker */
+.ticker{display:flex;gap:28px;justify-content:center;flex-wrap:wrap;border-bottom:1px solid var(--line);padding:10px 0;font-size:13px;color:var(--mut)}
+.ticker b{color:var(--fg);font-variant-numeric:tabular-nums}
+.ticker .up{color:var(--grn)} .ticker .dn{color:var(--red)}
+/* hero */
+header{text-align:center;padding:64px 0 48px}
+.mark{width:72px;height:72px;margin:0 auto 18px;border-radius:50%;
+  background:radial-gradient(circle at 32% 28%, #f2dd8e, var(--gold) 55%, #8a6d1c);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--disp);font-weight:700;font-size:26px;color:#15120a;box-shadow:0 8px 40px rgba(212,175,55,.25)}
+h1{font-family:var(--disp);font-weight:700;font-size:clamp(40px,8vw,64px);margin:0;letter-spacing:-.01em;text-wrap:balance}
+h1 .rd{color:var(--gold)}
+.tag{color:var(--mut);font-size:17px;max-width:34em;margin:14px auto 0;line-height:1.6}
+.cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:30px}
+.btn{display:inline-flex;align-items:center;gap:9px;padding:14px 26px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none}
+.btn-gold{background:linear-gradient(180deg,var(--gold-soft),var(--gold));color:#161206}
+.btn-ghost{border:1px solid var(--line);color:var(--fg)}
+.note{font-size:12.5px;color:var(--mut);margin-top:12px}
+/* live rate card */
+.ratecard{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;max-width:440px;margin:44px auto 0;text-align:left}
+.ratecard .hd{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--mut);letter-spacing:.08em;text-transform:uppercase}
+.live{color:var(--grn);font-weight:600}
+.rate-row{display:flex;justify-content:space-between;align-items:baseline;padding:13px 0;border-bottom:1px solid var(--line)}
+.rate-row:last-child{border-bottom:0}
+.rate-row .n{font-size:15px}
+.rate-row .n small{display:block;color:var(--mut);font-size:12px}
+.rate-row .v{font-family:var(--disp);font-size:24px;font-weight:700;color:var(--gold-soft);font-variant-numeric:tabular-nums}
+/* sections */
+section{padding:44px 0;border-top:1px solid var(--line)}
+h2{font-family:var(--disp);font-weight:700;font-size:28px;margin:0 0 22px;text-align:center;text-wrap:balance}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;min-width:0}
+.card h3{margin:0 0 6px;font-size:16px;display:flex;align-items:center;gap:8px}
+.card h3 .dot{width:8px;height:8px;border-radius:50%;background:var(--gold);flex:none}
+.card p{margin:0;color:var(--mut);font-size:14px;line-height:1.6}
+/* steps */
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;counter-reset:s}
+.step{border:1px solid var(--line);border-radius:14px;padding:18px;min-width:0}
+.step::before{counter-increment:s;content:counter(s);display:inline-flex;width:26px;height:26px;border-radius:50%;
+  background:var(--gold);color:#161206;font-weight:700;font-size:14px;align-items:center;justify-content:center;margin-bottom:10px}
+.step b{display:block;margin-bottom:4px}
+.step span{color:var(--mut);font-size:13.5px;line-height:1.55}
+/* download */
+#download .card{max-width:520px;margin:0 auto;text-align:center}
+.chips{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+.chip{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:5px 12px;color:var(--mut)}
+footer{border-top:1px solid var(--line);padding:28px 0 36px;text-align:center;color:var(--mut);font-size:13px;line-height:1.8}
+@media (prefers-reduced-motion:no-preference){
+  .mark{animation:glow 3.5s ease-in-out infinite alternate}
+  @keyframes glow{from{box-shadow:0 8px 32px rgba(212,175,55,.18)}to{box-shadow:0 10px 52px rgba(212,175,55,.38)}}
+}
+</style>
+
+</head><body><div class="ticker" id="ticker">
+  <span>GOLD 999 <b id="t-g">—</b>/10g</span>
+  <span>SILVER 999 <b id="t-s">—</b>/kg</span>
+  <span>USD/INR <b id="t-fx">—</b></span>
+  <span>Market <b class="up" id="t-ses">OPEN</b></span>
+</div>
+
+<div class="wrap">
+<header>
+  <div class="mark">RD</div>
+  <h1><span class="rd">RD</span>gold</h1>
+  <p class="tag">Live bullion rates and instant booking from your trusted dealer. Gold 999 &amp; 995, silver 999 — transparent premiums, 30-second locked rates, delivery you can track.</p>
+  <div class="cta-row">
+    <a class="btn btn-gold" href="https://github.com/thakursucheta1976-cpu/rdgold/releases/latest" id="dl">⬇ Download for Android</a>
+    <a class="btn btn-ghost" href="#how">How it works</a>
+  </div>
+  <p class="note">Free APK · Android 8.0+ · no ads, no trackers</p>
+
+  <div class="ratecard">
+    <div class="hd"><span>Indicative rates</span><span class="live" id="livebadge">● LIVE</span></div>
+    <div class="rate-row"><div class="n">Gold 999<small>per 10 grams, ex-GST</small></div><div class="v" id="r-g999">—</div></div>
+    <div class="rate-row"><div class="n">Gold 995<small>per 10 grams, ex-GST</small></div><div class="v" id="r-g995">—</div></div>
+    <div class="rate-row"><div class="n">Silver 999<small>per kilogram, ex-GST</small></div><div class="v" id="r-s999">—</div></div>
+  </div>
+</header>
+
+<section>
+  <h2>Built for serious bullion buyers</h2>
+  <div class="grid">
+    <div class="card"><h3><span class="dot"></span>Locked-rate booking</h3><p>Tap buy or sell and your rate freezes for 30 seconds while you confirm. The rate you see is the rate you get — GST shown separately, nothing hidden.</p></div>
+    <div class="card"><h3><span class="dot"></span>Limit orders</h3><p>Set your target rate and walk away. Your order fills automatically the moment the market touches your level — never on stale prices.</p></div>
+    <div class="card"><h3><span class="dot"></span>Live every 5 seconds</h3><p>International spot, USD/INR and your landed INR rate stream in real time, with a clear stale-rate warning if the feed ever lags.</p></div>
+    <div class="card"><h3><span class="dot"></span>Rate alerts</h3><p>Get pinged when gold crosses your number — above or below, any product.</p></div>
+    <div class="card"><h3><span class="dot"></span>Position &amp; history</h3><p>Every trade, your net position and your margin limit in one clean ledger.</p></div>
+    <div class="card"><h3><span class="dot"></span>Direct settlement</h3><p>RTGS/NEFT/IMPS details inside the app. Transfer, share your UTR on WhatsApp, collect your metal.</p></div>
+  </div>
+</section>
+
+<section id="how">
+  <h2>From download to delivery</h2>
+  <div class="steps">
+    <div class="step"><b>Install &amp; register</b><span>Download the APK, sign up with your mobile number and PAN/GSTIN.</span></div>
+    <div class="step"><b>Get approved</b><span>We verify your KYC and set your trading limit — usually same day.</span></div>
+    <div class="step"><b>Book your rate</b><span>Watch live rates, lock one for 30 seconds, confirm your quantity.</span></div>
+    <div class="step"><b>Pay &amp; collect</b><span>Transfer via RTGS/NEFT, send the UTR, and track your order to delivery.</span></div>
+  </div>
+</section>
+
+<section id="download">
+  <h2>Get the app</h2>
+  <div class="card">
+    <p style="color:var(--mut);margin:0 0 16px">Direct APK download — install in under a minute.</p>
+    <a class="btn btn-gold" href="https://github.com/thakursucheta1976-cpu/rdgold/releases/latest">⬇ Download RDgold APK</a>
+    <div class="chips">
+      <span class="chip">Android 8.0+</span><span class="chip">~20 MB</span><span class="chip">v1.0.0</span><span class="chip">Free</span>
+    </div>
+    <p style="color:var(--mut);font-size:12.5px;margin:16px 0 0">Enable “Install unknown apps” for your browser when prompted. Play Store listing coming soon.</p>
+  </div>
+</section>
+
+<footer>
+  RDgold · bullion rates &amp; booking<br>
+  Rates shown are indicative, ex-GST; final rate locked in-app at booking. All sales are firm contracts with physical delivery.<br>
+  WhatsApp: +91 00000 00000 · Mumbai, India
+</footer>
+</div>
+
+<script>
+/* ---------------------------------------------------------------------------
+   Live rates for the website ticker.
+   Set API to your deployed backend. Override in a browser with ?api=https://...
+   If the backend is unreachable (or still waking on Render free tier) the page
+   falls back to indicative demo values and the badge says INDICATIVE.
+--------------------------------------------------------------------------- */
+(function(){
+  var API = (new URLSearchParams(location.search).get('api')
+             || 'https://rdgold-backend.onrender.com').replace(/\/+$/,'');
+
+  var demo = { g999:118650, g995:118170, s999:152300, fx:88.40 };
+  var cur  = Object.assign({}, demo);
+  var mode = 'demo';          // demo | live | stale
+  var open = true;
+  var el = function(id){ return document.getElementById(id); };
+  var fmt = function(n){ return n==null ? '—' : '₹'+Math.round(n).toLocaleString('en-IN'); };
+
+  function paint(){
+    el('r-g999').textContent = fmt(cur.g999);
+    el('r-g995').textContent = fmt(cur.g995);
+    el('r-s999').textContent = fmt(cur.s999);
+    el('t-g').textContent    = fmt(cur.g999);
+    el('t-s').textContent    = fmt(cur.s999);
+    el('t-fx').textContent   = cur.fx ? cur.fx.toFixed(2) : '—';
+
+    var b = el('livebadge');
+    if (mode === 'live')      { b.textContent = '● LIVE';       b.style.color = 'var(--grn)'; }
+    else if (mode === 'stale'){ b.textContent = '● STALE';      b.style.color = 'var(--red)'; }
+    else                      { b.textContent = '● INDICATIVE'; b.style.color = 'var(--mut)'; }
+
+    var ses = el('t-ses');
+    if (ses){ ses.textContent = open ? 'OPEN' : 'CLOSED';
+              ses.className   = open ? 'up' : 'dn'; }
+  }
+
+  function pick(list, code){
+    for (var i=0;i<list.length;i++) if (list[i].code === code) return list[i];
+    return null;
+  }
+
+  function pull(){
+    var ctl = new AbortController();
+    var kill = setTimeout(function(){ ctl.abort(); }, 9000);
+    fetch(API + '/api/rates', { signal: ctl.signal, cache: 'no-store' })
+      .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+      .then(function(d){
+        var ps = d.products || [];
+        var g9 = pick(ps,'GOLD999'), g5 = pick(ps,'GOLD995'), s9 = pick(ps,'SILVER999');
+        if (!g9 || g9.buy == null) throw 0;            // engine has no price yet
+        cur = { g999: g9.buy,
+                g995: g5 ? g5.buy : null,
+                s999: s9 ? s9.buy : null,
+                fx:   d.spot ? d.spot.usdinr : null };
+        open = d.marketOpen !== false;
+        mode = d.stale ? 'stale' : 'live';
+        paint();
+      })
+      .catch(function(){
+        if (mode === 'demo') wiggle();               // never been live → keep demo moving
+        else { mode = 'stale'; paint(); }            // was live → say so, keep last price
+      })
+      .finally(function(){ clearTimeout(kill); });
+  }
+
+  function wiggle(){
+    var w = function(){ return (Math.random()-0.5)*0.0006; };
+    cur.g999 *= 1+w(); cur.g995 *= 1+w(); cur.s999 *= 1+w();
+    cur.fx   *= 1+(Math.random()-0.5)*0.0001;
+    paint();
+  }
+
+  paint();
+  pull();
+  setInterval(pull, 5000);
+})();
+</script>
+
+</body></html>

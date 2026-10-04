@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RDgold Admin</title>
+<style>
+:root{--bg:#0f1115;--card:#1a1d24;--gold:#d4af37;--txt:#e8e6e0;--mut:#8a8f98;--grn:#2ecc71;--red:#e74c3c}
+*{box-sizing:border-box;margin:0}body{font:14px/1.5 system-ui;background:var(--bg);color:var(--txt);padding:16px}
+h1{color:var(--gold);font-size:20px;margin-bottom:12px}h2{font-size:15px;margin:18px 0 8px;color:var(--gold)}
+.card{background:var(--card);border-radius:10px;padding:14px;margin-bottom:14px}
+table{width:100%;border-collapse:collapse}th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #2a2e37;font-size:13px}
+th{color:var(--mut);font-weight:600}input,select,button{background:#23262e;color:var(--txt);border:1px solid #333;border-radius:6px;padding:6px 8px;font-size:13px}
+button{cursor:pointer;background:var(--gold);color:#111;font-weight:600;border:0}button.sec{background:#2a2e37;color:var(--txt)}
+.rates{display:flex;gap:16px;flex-wrap:wrap}.rate{min-width:160px}.rate .v{font-size:22px;font-weight:700}
+.ok{color:var(--grn)}.bad{color:var(--red)}.mut{color:var(--mut)}
+#login{max-width:320px;margin:80px auto}#login input{width:100%;margin-bottom:8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+</style>
+</head>
+<body>
+<div id="login" class="card">
+  <h1>RDgold Admin</h1>
+  <input id="lphone" placeholder="admin" value="admin">
+  <input id="lpass" type="password" placeholder="password">
+  <button onclick="login()">Login</button>
+  <div id="lerr" class="bad"></div>
+</div>
+<div id="app" style="display:none">
+<h1>RDgold Admin <span id="mkt"></span></h1>
+<div class="card"><div class="rates" id="rates"></div>
+  <div class="row" style="margin-top:10px">
+    <label>Gold spread ₹/10g <input id="sprG" size="6"></label>
+    <label>Silver spread ₹/kg <input id="sprS" size="6"></label>
+    <label>Duty % <input id="duty" size="4"></label>
+    <button onclick="saveSettings()">Save</button>
+    <button class="sec" onclick="toggleMarket()">Open/Close Market</button>
+  </div>
+</div>
+<h2>Products (premiums ₹/unit)</h2><div class="card"><table id="prods"></table></div>
+<h2>Clients</h2><div class="card"><table id="users"></table></div>
+<h2>Orders</h2><div class="card"><table id="orders"></table></div>
+</div>
+<script>
+let T=localStorage.getItem('tok')||'';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const api=(p,opt={})=>fetch('/api'+p,{...opt,headers:{'Content-Type':'application/json','Authorization':'Bearer '+T,...(opt.headers||{})}}).then(async r=>{if(!r.ok)throw await r.json();return r.json()});
+async function login(){try{const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:lphone.value,password:lpass.value})}).then(r=>r.json());if(!r.token)throw r;T=r.token;localStorage.setItem('tok',T);boot()}catch(e){lerr.textContent=e.error||'login failed'}}
+let S={};
+async function boot(){
+  try{S=await api('/admin/settings')}catch(e){localStorage.removeItem('tok');return}
+  document.getElementById('login').style.display='none'; document.getElementById('app').style.display='block';
+  sprG.value=S.global_spread_gold; sprS.value=S.global_spread_silver; duty.value=S.duty_pct;
+  refresh(); setInterval(refreshRates,4000);
+}
+async function refresh(){refreshRates();loadProds();loadUsers();loadOrders()}
+async function refreshRates(){
+  const r=await fetch('/api/rates').then(r=>r.json());
+  mkt.innerHTML=r.marketOpen?'<span class="ok">● OPEN</span>':'<span class="bad">● CLOSED</span>';
+  rates.innerHTML=r.products.map(p=>`<div class="rate"><div class="mut">${p.name}</div><div class="v">₹${p.buy??'—'}</div><div class="mut">sell ₹${p.sell??'—'}</div></div>`).join('')+
+  `<div class="rate"><div class="mut">Spot</div><div>XAU $${r.spot.xauusd?.toFixed(2)??'—'}</div><div>XAG $${r.spot.xagusd?.toFixed(2)??'—'}</div><div>USDINR ${r.spot.usdinr?.toFixed(2)??'—'}</div><div class="${r.stale?'bad':'ok'}">${r.stale?'STALE':'live'}</div></div>`;
+}
+async function saveSettings(){await api('/admin/settings',{method:'PATCH',body:JSON.stringify({global_spread_gold:sprG.value,global_spread_silver:sprS.value,duty_pct:duty.value})});refreshRates()}
+async function toggleMarket(){const cur=(await api('/admin/settings')).market_open==='true';await api('/admin/settings',{method:'PATCH',body:JSON.stringify({market_open:String(!cur)})});refreshRates()}
+async function loadProds(){const ps=await api('/admin/products');
+  prods.innerHTML='<tr><th>Code</th><th>Sell prem</th><th>Buy prem</th><th>Active</th><th></th></tr>'+ps.map(p=>`<tr><td>${p.code}</td>
+  <td><input size=5 id="sp${p.id}" value="${p.sell_premium}"></td><td><input size=5 id="bp${p.id}" value="${p.buy_premium}"></td>
+  <td><select id="ac${p.id}"><option value=1 ${p.active?'selected':''}>yes</option><option value=0 ${p.active?'':'selected'}>no</option></select></td>
+  <td><button onclick="saveProd(${p.id})">Save</button></td></tr>`).join('')}
+async function saveProd(id){await api('/admin/products/'+id,{method:'PATCH',body:JSON.stringify({sell_premium:+document.getElementById('sp'+id).value,buy_premium:+document.getElementById('bp'+id).value,active:+document.getElementById('ac'+id).value})});loadProds();refreshRates()}
+async function loadUsers(){const us=await api('/admin/users');
+  users.innerHTML='<tr><th>ID</th><th>Name</th><th>Phone</th><th>Status</th><th>Margin ₹</th><th>Prem G/S</th><th></th></tr>'+us.filter(u=>u.role!=='admin').map(u=>`<tr><td>${u.id}</td><td>${esc(u.name)}</td><td>${esc(u.phone)}</td>
+  <td><select id="st${u.id}">${['pending','active','blocked'].map(s=>`<option ${s===u.status?'selected':''}>${s}</option>`).join('')}</select></td>
+  <td><input size=9 id="ml${u.id}" value="${u.margin_limit}"></td>
+  <td><input size=4 id="pg${u.id}" value="${u.premium_gold}"><input size=4 id="ps${u.id}" value="${u.premium_silver}"></td>
+  <td><button onclick="saveUser(${u.id})">Save</button></td></tr>`).join('')}
+async function saveUser(id){await api('/admin/users/'+id,{method:'PATCH',body:JSON.stringify({status:document.getElementById('st'+id).value,margin_limit:+document.getElementById('ml'+id).value,premium_gold:+document.getElementById('pg'+id).value,premium_silver:+document.getElementById('ps'+id).value})});loadUsers()}
+async function loadOrders(){const os=await api('/admin/orders');
+  orders.innerHTML='<tr><th>#</th><th>Client</th><th>Product</th><th>Side</th><th>Type</th><th>Qty</th><th>Rate</th><th>Total</th><th>Status</th><th></th></tr>'+os.map(o=>`<tr><td>${o.id}</td><td>${esc(o.user_name)} (${esc(o.phone)})</td><td>${o.product_code}</td><td>${o.side}</td><td>${o.type}</td><td>${o.qty}</td><td>₹${o.rate??''}</td><td>₹${o.total_amount??''}</td><td>${o.status}</td>
+  <td>${o.status==='executed'?`<button onclick="setOrder(${o.id},'delivered')">Delivered</button>`:''}${o.status==='pending'?`<button class="sec" onclick="setOrder(${o.id},'cancelled')">Cancel</button>`:''}</td></tr>`).join('')}
+async function setOrder(id,status){await api('/admin/orders/'+id,{method:'PATCH',body:JSON.stringify({status})});loadOrders()}
+if(T)boot();
+</script>
+</body>
+</html>

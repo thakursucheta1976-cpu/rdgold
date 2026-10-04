@@ -1,0 +1,32 @@
+# RDgold backend — Render blueprint.
+# In Render: New > Blueprint > pick this repo. It reads this file.
+services:
+  - type: web
+    name: rdgold-backend
+    runtime: node
+    region: singapore          # closest to India
+    plan: starter              # see note in DEPLOY.md before switching to free
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    disk:                      # keeps the SQLite file across deploys/restarts
+      name: rdgold-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: DB_PATH
+        value: /var/data/bullion.db
+      - key: WEB_ORIGIN
+        value: https://thakursucheta1976-cpu.github.io
+      - key: JWT_SECRET
+        generateValue: true    # Render generates and stores it
+      - key: ADMIN_PASSWORD
+        sync: false            # you type this in the Render dashboard
+      - key: METALS_DEV_KEY
+        sync: false            # optional: MCX/IBJA-aligned feed

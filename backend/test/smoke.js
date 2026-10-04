@@ -1,0 +1,194 @@
+// End-to-end smoke test. Run with: SIMULATE_RATES=1 node test/smoke.js
+// Starts server in-process on :8099 with a temp DB, exercises every flow.
+process.env.SIMULATE_RATES = '1';
+process.env.PORT = '8099';
+process.env.DB_PATH = '/tmp/bullion-test-' + Date.now() + '.db';
+process.env.ADMIN_PASSWORD = 'admin1234';
+
+await import('../src/server.js');
+await new Promise(r => setTimeout(r, 1500)); // let rates engine tick
+
+const B = 'http://localhost:8099/api';
+let fails = 0;
+const ok = (name, cond, extra='') => { console.log((cond?'PASS':'FAIL') + '  ' + name + (extra?'  '+extra:'')); if(!cond) fails++; };
+const j = (r) => r.json();
+const post = (p, body, tok) => fetch(B+p, {method:'POST', headers:{'Content-Type':'application/json', ...(tok?{Authorization:'Bearer '+tok}:{})}, body:JSON.stringify(body)});
+const get = (p, tok) => fetch(B+p, {headers: tok?{Authorization:'Bearer '+tok}:{}});
+const patch = (p, body, tok) => fetch(B+p, {method:'PATCH', headers:{'Content-Type':'application/json', Authorization:'Bearer '+tok}, body:JSON.stringify(body)});
+
+// rates public
+let r = await j(await get('/rates'));
+ok('rates served', r.products?.length === 3 && r.products[0].buy > 0, `gold999 buy=₹${r.products[0].buy}`);
+ok('rates not stale', r.stale === false);
+
+// register + login
+let reg = await j(await post('/register', {phone:'9999990001', name:'Test Trader', password:'secret12'}));
+ok('register', !!reg.token);
+let dup = await post('/register', {phone:'9999990001', name:'X', password:'secret12'});
+ok('duplicate phone rejected', dup.status === 409);
+let badlogin = await post('/login', {phone:'9999990001', password:'wrong'});
+ok('bad login rejected', badlogin.status === 401);
+let login = await j(await post('/login', {phone:'9999990001', password:'secret12'}));
+const tok = login.token;
+
+// pending user can't trade
+let qr = await post('/quote', {productCode:'GOLD999', side:'buy', qty:1}, tok);
+ok('pending user blocked from trading', qr.status === 403);
+
+// admin approves + sets margin
+let adm = await j(await post('/login', {phone:'admin', password:'admin1234'}));
+ok('admin login', !!adm.token);
+let users = await j(await get('/admin/users', adm.token));
+const uid = users.find(u=>u.phone==='9999990001').id;
+await patch('/admin/users/'+uid, {status:'active', margin_limit: 100000000}, adm.token);
+
+// quote + market order
+let quote = await j(await (await post('/quote', {productCode:'GOLD999', side:'buy', qty:2}, tok)));
+ok('quote issued', !!quote.quoteId && quote.rate > 0, `rate=₹${quote.rate} gst=₹${quote.gstAmount} total=₹${quote.total}`);
+ok('gst = 3%', Math.abs(quote.gstAmount - Math.round(quote.rate*2*0.03)) <= 1);
+let ord = await j(await post('/orders', {type:'market', quoteId: quote.quoteId, idempotencyKey:'k1'}, tok));
+ok('market order executed', ord.status === 'executed' && ord.rate === quote.rate);
+let ord2 = await j(await post('/orders', {type:'market', quoteId: quote.quoteId, idempotencyKey:'k1'}, tok));
+ok('idempotency: same order returned', ord2.id === ord.id);
+let reuse = await post('/orders', {type:'market', quoteId: quote.quoteId, idempotencyKey:'k2'}, tok);
+ok('quote reuse rejected', reuse.status === 409);
+
+// margin enforcement
+await patch('/admin/users/'+uid, {margin_limit: 1000}, adm.token);
+let qdeny = await post('/quote', {productCode:'GOLD999', side:'buy', qty:1}, tok);
+ok('margin limit enforced', qdeny.status === 403);
+await patch('/admin/users/'+uid, {margin_limit: 100000000}, adm.token);
+
+// limit order placement + cancel
+let lim = await j(await post('/orders', {type:'limit', productCode:'GOLD999', side:'buy', qty:1, limitRate: 1}, tok));
+ok('limit order pending', lim.status === 'pending');
+let cancel = await j(await fetch(B+'/orders/'+lim.id, {method:'DELETE', headers:{Authorization:'Bearer '+tok}}));
+ok('limit order cancelled', cancel.ok === true);
+
+// limit order that should fill (buy limit above current rate)
+r = await j(await get('/rates'));
+const cur = r.products.find(p=>p.code==='GOLD999').buy;
+let lim2 = await j(await post('/orders', {type:'limit', productCode:'GOLD999', side:'buy', qty:1, limitRate: cur + 10000}, tok));
+await new Promise(res => setTimeout(res, 3000));
+let orders = await j(await get('/orders', tok));
+const filled = orders.find(o=>o.id===lim2.id);
+ok('limit order auto-filled', filled.status === 'executed', `filled @₹${filled.rate}`);
+
+// position
+let pos = await j(await get('/position', tok));
+ok('position computed', pos.positions.length >= 1 && pos.positions[0].net_qty === 3);
+
+// alerts
+let al = await j(await post('/alerts', {productCode:'GOLD999', direction:'below', targetRate: cur + 50000}, tok));
+await new Promise(res => setTimeout(res, 3000));
+let als = await j(await get('/alerts', tok));
+ok('alert fired', als.find(a=>a.id===al.id).triggered === 1);
+
+// market close kill-switch
+await patch('/admin/settings', {market_open:'false'}, adm.token);
+let closed = await post('/quote', {productCode:'GOLD999', side:'buy', qty:1}, tok);
+ok('market-closed blocks quotes', closed.status === 423);
+await patch('/admin/settings', {market_open:'true'}, adm.token);
+
+// per-client premium
+await patch('/admin/users/'+uid, {premium_gold: 500}, adm.token);
+let rPers = await j(await get('/rates', tok));
+let rPub = await j(await get('/rates'));
+ok('per-client premium applied', rPers.products[0].buy - rPub.products[0].buy >= 490, `Δ=${rPers.products[0].buy - rPub.products[0].buy}`);
+
+// bank details public
+let bank = await j(await get('/bank-details'));
+ok('bank details served', !!bank.ifsc);
+
+// admin auth boundaries
+let noadm = await get('/admin/users', tok);
+ok('trader blocked from admin', noadm.status === 403);
+
+// quote expiry
+const expq = await j(await post('/quote', {productCode:'GOLD999', side:'sell', qty:1}, tok));
+// simulate expiry by direct wait is 30s — instead check sell side works
+ok('sell quote works', expq.rate > 0 && expq.gstAmount === 0);
+let sellOrd = await j(await post('/orders', {type:'market', quoteId: expq.quoteId}, tok));
+ok('sell order executed', sellOrd.status === 'executed');
+
+// ---- regression tests for audit fixes ----
+
+// XSS: reject angle brackets in name
+let xssReg = await post('/register', {phone:'9999990002', name:'<img src=x onerror=alert(1)>', password:'secret12'});
+ok('XSS name rejected at register', xssReg.status === 400);
+
+// IDOR: user B cannot fetch A's order via idempotency key
+await post('/register', {phone:'9999990003', name:'Other Trader', password:'secret12'});
+let other = await j(await post('/login', {phone:'9999990003', password:'secret12'}));
+let users2 = await j(await get('/admin/users', adm.token));
+const uid2 = users2.find(u=>u.phone==='9999990003').id;
+await patch('/admin/users/'+uid2, {status:'active', margin_limit: 100000000}, adm.token);
+let idorQuote = await j(await post('/quote', {productCode:'GOLD999', side:'buy', qty:1}, other.token));
+let idorOrd = await j(await post('/orders', {type:'market', quoteId: idorQuote.quoteId, idempotencyKey:'k1'}, other.token)); // A's key
+ok('idempotency key scoped per-user (no IDOR)', idorOrd.id !== ord.id && idorOrd.status === 'executed');
+
+// margin stacking: two quotes within limit individually, second order must be rejected
+r = await j(await get('/rates'));
+const g = r.products.find(p=>p.code==='GOLD999').buy;
+await patch('/admin/users/'+uid2, {margin_limit: Math.round(g*2.5)}, adm.token); // room for ~1.5 more units (already holds 1)
+let qa = await j(await post('/quote', {productCode:'GOLD999', side:'buy', qty:1}, other.token));
+let qb = await j(await post('/quote', {productCode:'GOLD999', side:'buy', qty:1}, other.token));
+let oa = await j(await post('/orders', {type:'market', quoteId: qa.quoteId}, other.token));
+let obRes = await post('/orders', {type:'market', quoteId: qb.quoteId}, other.token);
+ok('margin re-checked at execution (stacking blocked)', oa.status === 'executed' && obRes.status === 403);
+
+// settings whitelist + validation
+let badSet = await patch('/admin/settings', {gst_pct:'oops'}, adm.token);
+ok('bad gst_pct rejected', badSet.status === 400);
+let unkSet = await patch('/admin/settings', {evil_key:'1'}, adm.token);
+ok('unknown setting rejected', unkSet.status === 400);
+let badBank = await patch('/admin/settings', {bank_details:'not json'}, adm.token);
+ok('bad bank_details rejected', badBank.status === 400);
+
+// alert input validation
+let badAlert = await post('/alerts', {productCode:'GOLD999', direction:'above', targetRate: true}, tok);
+ok('non-numeric alert rejected', badAlert.status === 400);
+let badAlert2 = await post('/alerts', {productCode:'NOPE', direction:'above', targetRate: 100}, tok);
+ok('unknown product alert rejected', badAlert2.status === 404);
+
+// deactivated product: quote then deactivate then execute must fail
+let prods = await j(await get('/admin/products', adm.token));
+const g995 = prods.find(p=>p.code==='GOLD995');
+let dq = await j(await post('/quote', {productCode:'GOLD995', side:'buy', qty:1}, tok));
+await patch('/admin/products/'+g995.id, {active:0}, adm.token);
+let dOrd = await post('/orders', {type:'market', quoteId: dq.quoteId}, tok);
+ok('order on deactivated product rejected', dOrd.status === 409);
+await patch('/admin/products/'+g995.id, {active:1}, adm.token);
+
+// exposure: buy then sell same product should NET (not add)
+let posA = await j(await get('/position', tok));
+ok('netted exposure (flat-ish after buy+sell)', posA.openExposure < 4 * g, `exposure=₹${Math.round(posA.openExposure)}`);
+
+// admin user PATCH validation
+let badMl = await patch('/admin/users/'+uid, {margin_limit:'NaN-ish'}, adm.token);
+ok('bad margin_limit rejected', badMl.status === 400);
+
+// /api/me
+let me = await j(await get('/me', tok));
+ok('/api/me returns profile', me.phone === '9999990001' && me.status === 'active');
+
+// ---- deploy readiness: CORS + health ----
+let hz = await fetch('http://localhost:8099/healthz');
+ok('healthz responds', hz.status === 200 && (await hz.json()).ok === true);
+
+let cr = await fetch(B+'/rates', { headers: { Origin: 'https://thefactual.github.io' } });
+ok('CORS header on /api/rates', cr.headers.get('access-control-allow-origin') !== null,
+   'allow-origin=' + cr.headers.get('access-control-allow-origin'));
+
+let pf = await fetch(B+'/rates', { method:'OPTIONS', headers:{ Origin:'https://thefactual.github.io',
+   'Access-Control-Request-Method':'GET' } });
+ok('CORS preflight 204', pf.status === 204 && pf.headers.get('access-control-allow-origin') !== null);
+
+let ch = await fetch(B+'/rates/history?hours=1', { headers:{ Origin:'https://thefactual.github.io' } });
+ok('CORS header on /api/rates/history', ch.headers.get('access-control-allow-origin') !== null);
+
+let nocors = await fetch(B+'/me', { headers:{ Origin:'https://evil.example', Authorization:'Bearer '+tok } });
+ok('no CORS on private endpoints', nocors.headers.get('access-control-allow-origin') === null);
+
+console.log(fails === 0 ? '\nALL TESTS PASSED' : `\n${fails} FAILURES`);
+process.exit(fails === 0 ? 0 : 1);
