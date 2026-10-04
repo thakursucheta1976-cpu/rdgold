@@ -8,6 +8,7 @@ const TROY_OZ = 31.1035;
 const state = {
   xauusd: null, xagusd: null, usdinr: null,
   updatedAt: 0, fxUpdatedAt: 0,
+  fxSource: null, fxLive: false,
   stale: true,
   simulate: process.env.SIMULATE_RATES === '1'
 };
@@ -56,17 +57,39 @@ async function pollSpot() {
 
 async function pollFx() {
   try {
-    if (state.simulate) { state.usdinr = (state.usdinr || 84.2) * (1 + (Math.random() - 0.5) * 0.0002); state.fxUpdatedAt = Date.now(); return; }
-    let inr = null;
-    try {
-      const j = await fetchJson('https://open.er-api.com/v6/latest/USD');
-      inr = j?.rates?.INR;
-    } catch {}
-    if (!inr) { // fallback FX provider
-      const j2 = await fetchJson('https://api.frankfurter.dev/v1/latest?base=USD&symbols=INR');
-      inr = j2?.rates?.INR;
+    if (state.simulate) {
+      state.usdinr = (state.usdinr || 84.2) * (1 + (Math.random() - 0.5) * 0.0002);
+      state.fxUpdatedAt = Date.now(); state.fxSource = 'simulated'; state.fxLive = true; return;
     }
-    if (inr) { state.usdinr = inr; state.fxUpdatedAt = Date.now(); }
+
+    // --- live providers (sub-minute). Used only if a key is configured. ---
+    if (process.env.TWELVEDATA_KEY) {
+      try {
+        const j = await fetchJson(`https://api.twelvedata.com/price?symbol=USD/INR&apikey=${process.env.TWELVEDATA_KEY}`);
+        const v = parseFloat(j?.price);
+        if (v > 0) { state.usdinr = v; state.fxUpdatedAt = Date.now(); state.fxSource = 'twelvedata'; state.fxLive = true; return; }
+      } catch (e) { console.error('[rates] twelvedata fx failed:', e.message); }
+    }
+    if (process.env.METALS_DEV_KEY) {
+      try {
+        const j = await fetchJson(`https://api.metals.dev/v1/latest?api_key=${process.env.METALS_DEV_KEY}&currency=USD&unit=toz`);
+        if (j?.currencies?.INR) {
+          state.usdinr = 1 / j.currencies.INR; state.fxUpdatedAt = Date.now();
+          state.fxSource = 'metals.dev'; state.fxLive = true; return;
+        }
+      } catch (e) { console.error('[rates] metals.dev fx failed:', e.message); }
+    }
+
+    // --- fallback: central-bank reference rates. These publish ONCE A DAY. ---
+    let inr = null;
+    try { inr = (await fetchJson('https://open.er-api.com/v6/latest/USD'))?.rates?.INR; } catch {}
+    if (!inr) {
+      try { inr = (await fetchJson('https://api.frankfurter.dev/v1/latest?base=USD&symbols=INR'))?.rates?.INR; } catch {}
+    }
+    if (inr) {
+      state.usdinr = inr; state.fxUpdatedAt = Date.now();
+      state.fxSource = 'daily-reference'; state.fxLive = false;
+    }
   } catch (e) {
     console.error('[rates] fx poll failed:', e.message);
   }
@@ -104,6 +127,11 @@ export function snapshot(user = null) {
     stale: state.stale || (Date.now() - state.updatedAt > 120_000),
     marketOpen: getSetting('market_open') === 'true',
     spot: { xauusd: state.xauusd, xagusd: state.xagusd, usdinr: state.usdinr },
+    spotAgeMs: state.updatedAt ? Date.now() - state.updatedAt : null,
+    fx: { source: state.fxSource, live: state.fxLive,
+          ageMs: state.fxUpdatedAt ? Date.now() - state.fxUpdatedAt : null,
+          // a daily reference rate older than 26h means the publisher skipped an update
+          stale: !state.fxLive && !!state.fxUpdatedAt && (Date.now() - state.fxUpdatedAt > 26*3600_000) },
     gstPct: parseFloat(getSetting('gst_pct') || '3'),
     products: products.map(p => {
       const r = productRates(p, user);
@@ -120,7 +148,7 @@ export function onTick(fn) { listeners.push(fn); }
 const histStmt = db.prepare('INSERT INTO rate_history(ts,xauusd,xagusd,usdinr,gold_inr_10g,silver_inr_kg) VALUES (?,?,?,?,?,?)');
 let lastHist = 0;
 
-export function startRatesEngine({ spotMs = 5000, fxMs = 60000 } = {}) {
+export function startRatesEngine({ spotMs = 1000, fxMs = 60000, tickMs = 1000 } = {}) {
   pollSpot(); pollFx();
   setInterval(pollSpot, spotMs);
   setInterval(pollFx, fxMs);
@@ -132,7 +160,7 @@ export function startRatesEngine({ spotMs = 5000, fxMs = 60000 } = {}) {
       histStmt.run(Date.now(), state.xauusd, state.xagusd, state.usdinr,
         baseInr('gold', 0.999, 10), baseInr('silver', 0.999, 1000));
     }
-  }, 2000);
+  }, tickMs);
 }
 
 export { state as rateState };

@@ -404,7 +404,7 @@ function ensureAdmin() {
     const pw = process.env.ADMIN_PASSWORD || 'admin1234';
     db.prepare(`INSERT INTO users(phone,name,password_hash,role,status,margin_limit) VALUES ('admin','Administrator',?,'admin','active',1e12)`)
       .run(bcrypt.hashSync(pw, 10));
-    console.log(`[init] admin user created (phone: admin / password: ${pw}) — change it!`);
+    console.log('[init] admin user created (login: admin) — password from ADMIN_PASSWORD env var.');
   }
 }
 

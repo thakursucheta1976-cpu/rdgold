@@ -80,7 +80,7 @@ footer{border-top:1px solid var(--line);padding:28px 0 36px;text-align:center;co
   <h1><span class="rd">RD</span>gold</h1>
   <p class="tag">Live bullion rates and instant booking from your trusted dealer. Gold 999 &amp; 995, silver 999 — transparent premiums, 30-second locked rates, delivery you can track.</p>
   <div class="cta-row">
-    <a class="btn btn-gold" href="https://github.com/thakursucheta1976-cpu/rdgold/releases/latest" id="dl">⬇ Download for Android</a>
+    <a class="btn btn-gold" href="https://github.com/thefactual/rdgold/releases/latest" id="dl">⬇ Download for Android</a>
     <a class="btn btn-ghost" href="#how">How it works</a>
   </div>
   <p class="note">Free APK · Android 8.0+ · no ads, no trackers</p>
@@ -90,6 +90,7 @@ footer{border-top:1px solid var(--line);padding:28px 0 36px;text-align:center;co
     <div class="rate-row"><div class="n">Gold 999<small>per 10 grams, ex-GST</small></div><div class="v" id="r-g999">—</div></div>
     <div class="rate-row"><div class="n">Gold 995<small>per 10 grams, ex-GST</small></div><div class="v" id="r-g995">—</div></div>
     <div class="rate-row"><div class="n">Silver 999<small>per kilogram, ex-GST</small></div><div class="v" id="r-s999">—</div></div>
+    <div id="fxnote" style="font-size:12px;color:var(--mut);padding-top:12px;line-height:1.5"></div>
   </div>
 </header>
 
@@ -119,7 +120,7 @@ footer{border-top:1px solid var(--line);padding:28px 0 36px;text-align:center;co
   <h2>Get the app</h2>
   <div class="card">
     <p style="color:var(--mut);margin:0 0 16px">Direct APK download — install in under a minute.</p>
-    <a class="btn btn-gold" href="https://github.com/thakursucheta1976-cpu/rdgold/releases/latest">⬇ Download RDgold APK</a>
+    <a class="btn btn-gold" href="https://github.com/thefactual/rdgold/releases/latest">⬇ Download RDgold APK</a>
     <div class="chips">
       <span class="chip">Android 8.0+</span><span class="chip">~20 MB</span><span class="chip">v1.0.0</span><span class="chip">Free</span>
     </div>
@@ -149,6 +150,7 @@ footer{border-top:1px solid var(--line);padding:28px 0 36px;text-align:center;co
   var cur  = Object.assign({}, demo);
   var mode = 'demo';          // demo | live | stale
   var open = true;
+  var fx   = null;            // {source, live, ageMs, stale} from the backend
   var el = function(id){ return document.getElementById(id); };
   var fmt = function(n){ return n==null ? '—' : '₹'+Math.round(n).toLocaleString('en-IN'); };
 
@@ -168,6 +170,20 @@ footer{border-top:1px solid var(--line);padding:28px 0 36px;text-align:center;co
     var ses = el('t-ses');
     if (ses){ ses.textContent = open ? 'OPEN' : 'CLOSED';
               ses.className   = open ? 'up' : 'dn'; }
+
+    var note = el('fxnote');
+    if (note){
+      if (mode !== 'live' || !fx) { note.textContent = ''; }
+      else if (fx.live) {
+        note.textContent = 'Metals and USD/INR both live.';
+        note.style.color = 'var(--mut)';
+      } else {
+        var hrs = fx.ageMs ? Math.round(fx.ageMs / 3600000) : null;
+        note.textContent = 'Metals live every second. USD/INR is a daily reference rate'
+          + (hrs !== null ? ' (' + hrs + 'h old)' : '') + ', not intraday.';
+        note.style.color = 'var(--red)';
+      }
+    }
   }
 
   function pick(list, code){
@@ -189,6 +205,7 @@ footer{border-top:1px solid var(--line);padding:28px 0 36px;text-align:center;co
                 s999: s9 ? s9.buy : null,
                 fx:   d.spot ? d.spot.usdinr : null };
         open = d.marketOpen !== false;
+        fx   = d.fx || null;
         mode = d.stale ? 'stale' : 'live';
         paint();
       })
@@ -208,7 +225,7 @@ footer{border-top:1px solid var(--line);padding:28px 0 36px;text-align:center;co
 
   paint();
   pull();
-  setInterval(pull, 5000);
+  setInterval(pull, 1000);
 })();
 </script>
 

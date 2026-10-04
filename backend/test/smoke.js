@@ -172,6 +172,19 @@ ok('bad margin_limit rejected', badMl.status === 400);
 let me = await j(await get('/me', tok));
 ok('/api/me returns profile', me.phone === '9999990001' && me.status === 'active');
 
+// ---- rate freshness is reported, not hidden ----
+let fr = await j(await get('/rates'));
+ok('spot age reported', typeof fr.spotAgeMs === 'number' && fr.spotAgeMs < 10000, `age=${fr.spotAgeMs}ms`);
+ok('fx block present', !!fr.fx && 'live' in fr.fx && 'source' in fr.fx, `source=${fr.fx && fr.fx.source}`);
+ok('fx marked live in simulate mode', fr.fx.live === true);
+ok('fx age reported', typeof fr.fx.ageMs === 'number');
+
+// engine ticks at ~1s: two reads a second apart must show a newer timestamp
+const t0 = (await j(await get('/rates'))).ts;
+await new Promise(r => setTimeout(r, 2200));
+const t1 = (await j(await get('/rates'))).ts;
+ok('rates refresh within ~1s', t1 > t0, `+${t1 - t0}ms`);
+
 // ---- deploy readiness: CORS + health ----
 let hz = await fetch('http://localhost:8099/healthz');
 ok('healthz responds', hz.status === 200 && (await hz.json()).ok === true);
