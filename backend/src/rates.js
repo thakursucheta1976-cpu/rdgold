@@ -9,6 +9,7 @@ const state = {
   xauusd: null, xagusd: null, usdinr: null,
   updatedAt: 0, fxUpdatedAt: 0,
   fxSource: null, fxLive: false,
+  xauMovedAt: 0, xagMovedAt: 0, feedUpdatedAt: null,
   stale: true,
   simulate: process.env.SIMULATE_RATES === '1'
 };
@@ -30,6 +31,7 @@ async function pollSpot() {
       state.xauusd = (state.xauusd || 2650) * (1 + (Math.random() - 0.5) * 0.0004);
       state.xagusd = (state.xagusd || 31.5) * (1 + (Math.random() - 0.5) * 0.0006);
       state.updatedAt = Date.now(); state.stale = false;
+      state.xauMovedAt = state.xagMovedAt = Date.now();
       return;
     }
     if (process.env.METALS_DEV_KEY) {
@@ -44,8 +46,15 @@ async function pollSpot() {
         fetchJson('https://api.gold-api.com/price/XAU'),
         fetchJson('https://api.gold-api.com/price/XAG')
       ]);
-      if (xau?.price) state.xauusd = xau.price;
-      if (xag?.price) state.xagusd = xag.price;
+      if (xau?.price) {
+        if (xau.price !== state.xauusd) state.xauMovedAt = Date.now();
+        state.xauusd = xau.price;
+        state.feedUpdatedAt = xau.updatedAt || null;
+      }
+      if (xag?.price) {
+        if (xag.price !== state.xagusd) state.xagMovedAt = Date.now();
+        state.xagusd = xag.price;
+      }
     }
     state.updatedAt = Date.now();
     state.stale = false;
@@ -133,11 +142,19 @@ export function snapshot(user = null) {
           // a daily reference rate older than 26h means the publisher skipped an update
           stale: !state.fxLive && !!state.fxUpdatedAt && (Date.now() - state.fxUpdatedAt > 26*3600_000) },
     gstPct: parseFloat(getSetting('gst_pct') || '3'),
+    // how long since the international price actually changed. Metals stop moving
+    // when the market is shut (weekends, holidays) — that is not a stale feed.
+    moved: { goldMsAgo: state.xauMovedAt ? Date.now() - state.xauMovedAt : null,
+             silverMsAgo: state.xagMovedAt ? Date.now() - state.xagMovedAt : null,
+             feedUpdatedAt: state.feedUpdatedAt },
     products: products.map(p => {
       const r = productRates(p, user);
+      const gst = parseFloat(getSetting('gst_pct') || '3');
       return { code: p.code, name: p.name, metal: p.metal, unit: p.unit,
                minQty: p.min_qty, maxQty: p.max_qty,
-               buy: r ? r.buyRate : null, sell: r ? r.sellRate : null };
+               buy: r ? r.buyRate : null, sell: r ? r.sellRate : null,
+               buyWithGst: r ? Math.round(r.buyRate * (1 + gst / 100)) : null,
+               spotUsd: p.metal === 'gold' ? state.xauusd : state.xagusd };
     })
   };
 }

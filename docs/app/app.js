@@ -131,14 +131,19 @@ function paintRates(d) {
   snap = d;
   badge(d.stale ? 'stale' : (d.marketOpen === false ? 'closed' : 'live'));
 
+  const gstPct = d.gstPct;
   $('ratecard').innerHTML = (d.products || []).map(p => {
     const prev = prevBuy[p.code];
     const arrow = (prev == null || p.buy === prev) ? '' : (p.buy > prev ? ' <span class="up">▲</span>' : ' <span class="dn">▼</span>');
     prevBuy[p.code] = p.buy;
+    const oz = p.spotUsd ? '$' + p.spotUsd.toFixed(2) + '/oz' : '';
     return `<div class="rate row">
-      <div class="nm">${esc(p.name)}<small>per ${esc(p.unit)} · sell ${fmt(p.sell)}</small></div>
+      <div class="nm">${esc(p.name)}<small>per ${esc(p.unit)} · sell ${fmt(p.sell)}</small>
+        <small>${oz}</small></div>
       <div style="text-align:right">
-        <div class="px">${fmt(p.buy)}${arrow}<small>you buy</small></div>
+        <div class="px">${fmt(p.buy)}${arrow}<small>you buy · ex-GST</small></div>
+        <div class="sm" style="margin-top:4px;color:var(--gold-soft);font-variant-numeric:tabular-nums">
+          ${fmt(p.buyWithGst)} <span class="muted">inc ${gstPct}% GST</span></div>
         <div class="btn2" style="margin-top:8px">
           <button class="btn gold" style="padding:8px" data-buy="${esc(p.code)}">Buy</button>
           <button class="btn" style="padding:8px" data-sell="${esc(p.code)}">Sell</button>
@@ -150,8 +155,24 @@ function paintRates(d) {
   $('ratecard').querySelectorAll('[data-sell]').forEach(b => b.onclick = () => openTrade(b.dataset.sell, 'sell'));
 
   const s = d.spot || {};
-  $('spotline').textContent =
-    `XAU ${s.xauusd ? s.xauusd.toFixed(2) : '—'} · XAG ${s.xagusd ? s.xagusd.toFixed(2) : '—'} · USDINR ${s.usdinr ? s.usdinr.toFixed(3) : '—'}`;
+  $('spotline').innerHTML =
+    `Gold <b>$${s.xauusd ? s.xauusd.toFixed(2) : '—'}</b>/oz &nbsp;·&nbsp; ` +
+    `Silver <b>$${s.xagusd ? s.xagusd.toFixed(2) : '—'}</b>/oz &nbsp;·&nbsp; ` +
+    `USD/INR <b>${s.usdinr ? s.usdinr.toFixed(3) : '—'}</b>`;
+
+  // the feed can be perfectly live while the market is shut, so say which it is
+  const mv = d.moved, mb = $('movedline');
+  if (mb) {
+    const ms = mv ? mv.goldMsAgo : null;
+    if (ms == null) { mb.textContent = ''; }
+    else if (ms < 120000) { mb.innerHTML = '<span class="up">Prices moving now.</span>'; }
+    else {
+      const mins = Math.round(ms / 60000);
+      const txt = mins >= 60 ? Math.round(mins / 60) + 'h' : mins + 'm';
+      mb.innerHTML = '<span class="muted">No movement for ' + txt +
+        ' — the bullion market is closed. This is the last traded price.</span>';
+    }
+  }
 
   const fx = d.fx;
   if (fx && !fx.live) {

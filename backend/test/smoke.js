@@ -188,6 +188,18 @@ ok('user shows last_login', !!(row && row.last_login), `count=${row && row.login
 let notadmin = await get('/admin/logins', tok);
 ok('logins are admin-only', notadmin.status === 403);
 
+// ---- GST-inclusive price, international leg, movement tracking ----
+let gq = await j(await get('/rates'));
+let g9 = gq.products.find(p => p.code === 'GOLD999');
+ok('GST-inclusive price present', g9.buyWithGst > g9.buy, `${g9.buy} -> ${g9.buyWithGst}`);
+const expected = Math.round(g9.buy * (1 + gq.gstPct / 100));
+ok('GST maths correct', g9.buyWithGst === expected, `expected ${expected}`);
+ok('gold carries its USD spot', g9.spotUsd > 0, `XAU ${g9.spotUsd}`);
+let s9 = gq.products.find(p => p.code === 'SILVER999');
+ok('silver carries its own USD spot', s9.spotUsd > 0 && s9.spotUsd !== g9.spotUsd, `XAG ${s9.spotUsd}`);
+ok('silver priced separately from gold', s9.buy > 0 && s9.buy !== g9.buy);
+ok('movement is reported', gq.moved && typeof gq.moved.goldMsAgo === 'number', `${gq.moved && gq.moved.goldMsAgo}ms`);
+
 // ---- rate freshness is reported, not hidden ----
 let fr = await j(await get('/rates'));
 ok('spot age reported', typeof fr.spotAgeMs === 'number' && fr.spotAgeMs < 10000, `age=${fr.spotAgeMs}ms`);
