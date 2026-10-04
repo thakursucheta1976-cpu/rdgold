@@ -167,6 +167,21 @@ const ist = (t, withTime = true) => {
 
 const num = n => n == null ? '—' : Math.round(n).toLocaleString('en-IN');
 
+// say plainly where the numbers come from — a futures contract is not spot
+function basisLine(d) {
+  const s = d.sources || {};
+  if (s.basis === 'mcx') return 'Live Mumbai rate, tracking MCX second by second.';
+  return 'Live international rate converted at today\'s USD/INR.';
+}
+// "GOLD 04DEC2026" -> "Gold Dec 2026 futures"
+function prettyContract(c) {
+  const m = String(c).match(/^(\w+)\s+(\d{2})([A-Z]{3})(\d{4})$/);
+  if (!m) return c;
+  const name = m[1].charAt(0) + m[1].slice(1).toLowerCase();
+  const mon = m[3].charAt(0) + m[3].slice(1).toLowerCase();
+  return `${name} ${mon} ${m[4]} futures`;
+}
+
 function paintRates(d) {
   snap = d;
   badge(d.stale ? 'stale' : (d.marketOpen === false ? 'closed' : 'live'));
@@ -200,7 +215,8 @@ function paintRates(d) {
          </tr></thead>
          <tbody>${rows}</tbody>
        </table>
-       <div class="muted sm" style="margin-top:10px">Tap any row to call and book. Rates are indicative; the price is fixed on the call.</div>`
+       <div class="muted sm" style="margin-top:10px">${basisLine(d)}</div>
+       <div class="muted sm" style="margin-top:6px">Tap any row to call and book. Rates are indicative; the price is fixed on the call.</div>`
     : '<div class="muted sm">No products available.</div>';
 
   $('ratecard').querySelectorAll('[data-row]').forEach(r => r.onclick = () => openTrade(r.dataset.row, 'buy'));
@@ -426,6 +442,8 @@ async function loadAdmin() {
     $('adm-cs').value   = (sv.cash_silver_rate && Number(sv.cash_silver_rate) > 0) ? sv.cash_silver_rate : '';
     $('adm-phone').value = sv.dealer_phone || '';
     $('adm-sg').value   = sv.global_spread_gold ?? '';
+    $('adm-mg').value   = sv.margin_gold ?? '';
+    $('adm-ms').value   = sv.margin_silver ?? '';
     $('adm-ss').value   = sv.global_spread_silver ?? '';
     $('adm-duty').value = sv.duty_pct ?? '';
     $('adm-gst').value  = sv.gst_pct ?? '';
@@ -498,6 +516,7 @@ $('adm-save').onclick = async () => {
   try {
     const body = {};
     const map = { 'adm-sg': 'global_spread_gold', 'adm-ss': 'global_spread_silver',
+                  'adm-mg': 'margin_gold', 'adm-ms': 'margin_silver',
                   'adm-duty': 'duty_pct', 'adm-gst': 'gst_pct' };
     for (const k in map) if ($(k).value !== '') body[map[k]] = $(k).value;
     body.dealer_phone = $('adm-phone').value.trim();

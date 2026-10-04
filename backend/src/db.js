@@ -129,7 +129,10 @@ set.run('cash_silver_rate', '0');
 set.run('gst_pct', '3');
 set.run('global_spread_gold', '0');  // INR per 10g adjustment to track MCX
 set.run('global_spread_silver', '0');
+set.run('margin_gold', '0');     // dealer's own profit, INR per 10g (buy above / sell below)
+set.run('margin_silver', '0');   // same, INR per kg
 set.run('market_open', 'true');
+set.run('price_basis', 'mcx');   // mcx = official Indian exchange, spot = international
 set.run('dealer_phone', '');         // number clients call / WhatsApp to book
 
 const seedProducts = db.prepare(`INSERT OR IGNORE INTO products
@@ -142,12 +145,32 @@ seedProducts.run('SILVER999', 'Silver 999 (1kg)', 'silver', 0.999, '1kg', 1000, 
 
 // Orders are booked on the phone now, so there is no kill-switch to flip:
 // the market is always open as far as the app is concerned.
+// A remote database can end up with more than one row for the same setting
+// (the table was created without the key constraint at some point). A plain
+// "SELECT key, value" then hands back whichever row comes last, so a freshly
+// saved rate looks saved and then vanishes. Keep only the newest row per key.
 try {
-  db.prepare("INSERT INTO settings(key,value) VALUES('market_open','true') ON CONFLICT(key) DO UPDATE SET value='true'").run();
-  const mo = db.prepare("SELECT value FROM settings WHERE key='market_open'").get();
-  if (!mo || mo.value !== 'true') console.error('[db] WARNING: market_open is still', mo && mo.value);
-  else console.log('[db] market_open = true');
+  const before = db.prepare('SELECT COUNT(*) c FROM settings').get().c;
+  const keys   = db.prepare('SELECT COUNT(DISTINCT key) c FROM settings').get().c;
+  if (before > keys) {
+    db.prepare('DELETE FROM settings WHERE rowid NOT IN (SELECT MAX(rowid) FROM settings GROUP BY key)').run();
+    const after = db.prepare('SELECT COUNT(*) c FROM settings').get().c;
+    console.log(`[db] cleaned duplicate settings rows: ${before} -> ${after} (${keys} keys)`);
+  } else {
+    console.log(`[db] settings rows ${before}, keys ${keys} — no duplicates`);
+  }
+} catch (e) { console.error('[db] could not clean settings:', e.message); }
+
+try {
+  const r = db.prepare("UPDATE settings SET value='true' WHERE key='market_open'").run();
+  if (!r.changes) db.prepare("INSERT INTO settings(key,value) VALUES('market_open','true')").run();
+  const rows = db.prepare("SELECT value FROM settings WHERE key='market_open'").all();
+  console.log('[db] market_open =', rows.map(x => x.value).join('/') || 'missing');
 } catch (e) { console.error('[db] could not force market_open:', e.message); }
+
+// The dealer's buy/sell gap is set in the admin panel now, so the old
+// per-product premiums must not be added on top of it.
+try { db.prepare('UPDATE products SET sell_premium=0, buy_premium=0').run(); } catch {}
 
 // --- migrations: columns added after the first release ---
 const cols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
@@ -180,14 +203,19 @@ export function getSetting(key) {
 
 export function setSetting(key, value) {
   const want = String(value);
-  db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, want);
-  // A remote database can accept a write and still not keep it. Read it straight
-  // back (not from the cache) so a silent failure becomes a visible error instead
-  // of a value that looks saved and disappears a few seconds later.
-  const row = db.prepare('SELECT value FROM settings WHERE key=?').get(key);
-  if (!row || String(row.value) !== want) {
+  // update first; insert only when the key is genuinely missing. This can never
+  // add a second row for a key, whatever the table's constraints are.
+  const r = db.prepare('UPDATE settings SET value=? WHERE key=?').run(want, key);
+  if (!r.changes) db.prepare('INSERT INTO settings(key,value) VALUES(?,?)').run(key, want);
+
+  // verify through the same query the app reads with, so a duplicate row or a
+  // write the database quietly dropped shows up as an error instead of a value
+  // that looks saved and disappears a few seconds later.
+  const rows = db.prepare('SELECT key, value FROM settings WHERE key=?').all(key);
+  const got = rows.length ? String(rows[rows.length - 1].value) : null;
+  if (got !== want) {
     _settings = null;
-    throw new Error(`the database did not keep ${key} (wanted "${want}", it has "${row ? row.value : 'nothing'}")`);
+    throw new Error(`the database did not keep ${key} (wanted "${want}", it has "${got}"${rows.length > 1 ? `, ${rows.length} rows` : ''})`);
   }
   if (_settings) _settings[key] = want;
   return want;

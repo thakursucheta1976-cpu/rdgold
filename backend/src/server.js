@@ -58,7 +58,15 @@ app.use((req, res, next) => {
 });
 
 // ---------- health (Render health check) ----------
-app.get('/healthz', (req, res) => res.json({ ok: true, stale: rateState.stale, ts: Date.now() }));
+app.get('/healthz', (req, res) => {
+  let rows = null, keys = null;
+  try {
+    rows = db.prepare('SELECT COUNT(*) c FROM settings').get().c;
+    keys = db.prepare('SELECT COUNT(DISTINCT key) c FROM settings').get().c;
+  } catch {}
+  res.json({ ok: true, stale: rateState.stale, ts: Date.now(),
+             settingsRows: rows, settingsKeys: keys, marketOpen: getSetting('market_open') === 'true' });
+});
 
 // ---------- auth ----------
 function sign(u, did) { return jwt.sign({ id: u.id, role: u.role, did: did || u.device_id || null },
@@ -441,12 +449,15 @@ app.get('/api/admin/settings', auth('admin'), (req, res) => {
   res.json(Object.fromEntries(rows.map(r => [r.key, r.value])));
 });
 const NUMERIC_SETTINGS = ['duty_pct', 'gst_pct', 'global_spread_gold', 'global_spread_silver',
+                          'margin_gold', 'margin_silver',
                           'cash_gold_rate', 'cash_gold_995_rate', 'cash_silver_rate'];
-const ALLOWED_SETTINGS = [...NUMERIC_SETTINGS, 'dealer_phone'];
+const ALLOWED_SETTINGS = [...NUMERIC_SETTINGS, 'dealer_phone', 'price_basis'];
 app.patch('/api/admin/settings', auth('admin'), (req, res) => {
   for (const [k, v] of Object.entries(req.body || {})) {
     if (!ALLOWED_SETTINGS.includes(k)) return res.status(400).json({ error: `unknown setting ${k}` });
     if (NUMERIC_SETTINGS.includes(k) && !Number.isFinite(Number(v))) return res.status(400).json({ error: `bad ${k}` });
+    if (k === 'price_basis' && !['mcx', 'spot'].includes(String(v)))
+      return res.status(400).json({ error: 'price_basis must be mcx or spot' });
     if (k === 'dealer_phone') {
       const t = String(v).trim();
       if (t && !/^\+?[0-9][0-9 -]{6,18}$/.test(t)) return res.status(400).json({ error: 'bad dealer_phone' });

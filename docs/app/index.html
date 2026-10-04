@@ -241,10 +241,12 @@ nav button.on{color:var(--gold-soft)}
     <div class="card">
       <h2>Settings</h2>
       <label>Your phone — clients tap this to call you</label><input id="adm-phone" inputmode="tel" placeholder="+919876543210">
-      <label>Your margin on gold (₹ per 10g, added to the live rate)</label><input id="adm-sg" inputmode="decimal">
-      <label>Your margin on silver (₹ per kg)</label><input id="adm-ss" inputmode="decimal">
-      <label>Import duty % (used to work out the landed rate)</label><input id="adm-duty" inputmode="decimal">
-      <label>GST % (shown in the With GST column)</label><input id="adm-gst" inputmode="decimal">
+      <label>Gold — carry &amp; premium vs MCX (₹ per 10g, minus allowed)</label><input id="adm-sg" inputmode="decimal" placeholder="e.g. -2100">
+      <label>Gold — your margin (₹ per 10g)</label><input id="adm-mg" inputmode="decimal" placeholder="e.g. 150">
+      <label>Silver — carry &amp; premium vs MCX (₹ per kg, minus allowed)</label><input id="adm-ss" inputmode="decimal">
+      <label>Silver — your margin (₹ per kg)</label><input id="adm-ms" inputmode="decimal">
+      <label>GST %</label><input id="adm-gst" inputmode="decimal">
+      <label>Import duty % — only used if the exchange feed goes down</label><input id="adm-duty" inputmode="decimal">
       <div style="height:12px"></div>
       <button class="btn gold" id="adm-save">Save settings</button>
     </div>

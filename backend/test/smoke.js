@@ -6,6 +6,7 @@ process.env.DB_PATH = '/tmp/bullion-test-' + Date.now() + '.db';
 process.env.ADMIN_PASSWORD = 'admin1234';
 
 await import('../src/server.js');
+const { __setMcxForTest } = await import('../src/rates.js');
 await new Promise(r => setTimeout(r, 1500)); // let rates engine tick
 
 const B = 'http://localhost:8099/api';
@@ -383,6 +384,60 @@ let diag = await j(await get('/admin/diag', adm.token));
 ok('diagnostics prove the database keeps writes', diag.writesPersist === true, diag.database);
 let diagClient = await get('/admin/diag', ctok);
 ok('diagnostics are admin only', diagClient.status === 403);
+
+// ---- a settings row can never be duplicated (the live-database bug) ----
+db_dupe: {
+  // write the same key many times; there must still be exactly one row for it
+  for (let i = 0; i < 5; i++) await patch('/admin/settings', { cash_gold_rate: 100000 + i }, adm.token);
+  let hz = await (await fetch('http://localhost:8099/healthz')).json();
+  ok('no duplicate settings rows after repeated saves', hz.settingsRows === hz.settingsKeys,
+     `${hz.settingsRows} rows / ${hz.settingsKeys} keys`);
+  ok('market stays open', hz.marketOpen === true);
+
+  // and the value that survives is the last one written
+  let r2 = await j(await get('/rates'));
+  ok('the last saved cash rate is the one in use',
+     r2.products.find(p => p.code === 'GOLD999').cash === 100004);
+  await patch('/admin/settings', { cash_gold_rate: 0 }, adm.token);
+}
+
+// ---- every number says where it came from ----
+let src = (await j(await get('/rates'))).sources;
+ok('the snapshot names its metals source', typeof src.metals === 'string' && src.metals.length > 0, src.metals);
+ok('the snapshot names its fx source', typeof src.fx === 'string' && src.fx.length > 0, src.fx);
+ok('a feed disagreement flag is present', typeof src.suspect === 'boolean');
+
+// ---- pricing off MCX, the official Indian exchange ----
+__setMcxForTest({ gold:   { price: 150250, contract: 'GOLD 04DEC2026' },
+                  silver: { price: 225545, contract: 'SILVER 04DEC2026' },
+                  at: Date.now() });
+await patch('/admin/settings', { price_basis: 'mcx', global_spread_gold: 0, global_spread_silver: 0,
+                                 cash_gold_rate: 0, cash_gold_995_rate: 0, cash_silver_rate: 0 }, adm.token);
+let mcxRates = await j(await get('/rates'));
+ok('the snapshot says it is pricing off MCX', mcxRates.sources.basis === 'mcx', mcxRates.sources.basis);
+ok('MCX contracts are named', mcxRates.sources.mcx.gold.contract === 'GOLD 04DEC2026');
+
+const m995 = mcxRates.products.find(p => p.code === 'GOLD995');
+const m999 = mcxRates.products.find(p => p.code === 'GOLD999');
+const mSil = mcxRates.products.find(p => p.code === 'SILVER999');
+// the MCX gold contract is 995, so 995 tracks it and 999 sits a touch above
+ok('995 matches the MCX contract', Math.abs(m995.buy - 150250) <= 300, `${m995.buy} vs 150250`);
+ok('999 is scaled up from the 995 contract', m999.buy > m995.buy && m999.buy < m995.buy * 1.01,
+   `${m999.buy} vs ${m995.buy}`);
+ok('silver matches the MCX contract', Math.abs(mSil.buy - 225545) <= 600, `${mSil.buy} vs 225545`);
+
+// a stale exchange feed must not be used
+__setMcxForTest({ gold: { price: 150250, contract: 'GOLD 04DEC2026' }, silver: null, at: Date.now() - 20 * 60_000 });
+let staleMcx = await j(await get('/rates'));
+ok('a stale MCX feed falls back to international spot', staleMcx.sources.basis === 'spot');
+
+// and the dealer can choose to price off spot instead
+__setMcxForTest({ gold: { price: 150250, contract: 'GOLD 04DEC2026' }, silver: null, at: Date.now() });
+await patch('/admin/settings', { price_basis: 'spot' }, adm.token);
+ok('the dealer can switch back to spot', (await j(await get('/rates'))).sources.basis === 'spot');
+let badBasis = await patch('/admin/settings', { price_basis: 'nonsense' }, adm.token);
+ok('an unknown basis is rejected', badBasis.status === 400);
+await patch('/admin/settings', { price_basis: 'mcx' }, adm.token);
 
 console.log(fails === 0 ? '\nALL TESTS PASSED' : `\n${fails} FAILURES`);
 process.exit(fails === 0 ? 0 : 1);

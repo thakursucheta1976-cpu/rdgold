@@ -14,11 +14,11 @@ const state = {
   simulate: process.env.SIMULATE_RATES === '1'
 };
 
-async function fetchJson(url, timeoutMs = 8000) {
+async function fetchJson(url, opts = {}, timeoutMs = 8000) {
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), timeoutMs);
   try {
-    const r = await fetch(url, { signal: c.signal });
+    const r = await fetch(url, { signal: c.signal, headers: opts.headers });
     if (!r.ok) throw new Error(`HTTP ${r.status} ${url}`);
     return await r.json();
   } finally { clearTimeout(t); }
@@ -89,6 +89,28 @@ async function pollFx() {
       } catch (e) { console.error('[rates] metals.dev fx failed:', e.message); }
     }
 
+    // --- free intraday USD/INR, no key needed ---
+    // Yahoo's chart feed carries the spot price and the minute it was quoted.
+    // FX trades round the clock Monday to Friday, so a quote more than a few
+    // hours old means the market is shut (weekend) rather than the feed being broken.
+    try {
+      const j = await fetchJson(
+        'https://query1.finance.yahoo.com/v8/finance/chart/USDINR=X?interval=1d&range=1d',
+        { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; RDgold/1.0)' } });
+      const m = j?.chart?.result?.[0]?.meta;
+      const v = parseFloat(m?.regularMarketPrice);
+      if (v > 0 && v > 50 && v < 200) {              // sanity: USD/INR is nowhere near these edges
+        const quotedAt = m.regularMarketTime ? m.regularMarketTime * 1000 : Date.now();
+        state.usdinr = v;
+        state.fxUpdatedAt = Date.now();
+        state.fxQuotedAt = quotedAt;
+        state.fxSource = 'yahoo';
+        // live if the quote itself is fresh; stale quotes are normal at weekends
+        state.fxLive = (Date.now() - quotedAt) < 30 * 60_000;
+        return;
+      }
+    } catch (e) { console.error('[rates] yahoo fx failed:', e.message); }
+
     // --- fallback: central-bank reference rates. These publish ONCE A DAY. ---
     let inr = null;
     try { inr = (await fetchJson('https://open.er-api.com/v6/latest/USD'))?.rates?.INR; } catch {}
@@ -104,13 +126,38 @@ async function pollFx() {
   }
 }
 
+// Which number the rupee price is built on: MCX when the exchange is quoting,
+// otherwise international spot converted at the live USD/INR.
+// tests inject an exchange snapshot here instead of hitting the network
+export function __setMcxForTest(m) { state.mcx = m; state.mcxMovedAt = Date.now(); }
+
+export function priceBasis() {
+  const want = getSetting('price_basis') || 'mcx';   // 'mcx' | 'spot'
+  const fresh = state.mcx && (Date.now() - state.mcx.at) < 10 * 60_000;
+  if (want === 'mcx' && fresh && state.mcx.gold) return 'mcx';
+  return 'spot';
+}
+
 export function baseInr(metal, purity, grams) {
-  if (state.xauusd == null || state.usdinr == null || (metal === 'silver' && state.xagusd == null)) return null;
-  const duty = parseFloat(getSetting('duty_pct') || '6') / 100;
-  const usd = metal === 'gold' ? state.xauusd : state.xagusd;
   const spreadKey = metal === 'gold' ? 'global_spread_gold' : 'global_spread_silver';
   const spread = parseFloat(getSetting(spreadKey) || '0');
   const perUnitSpread = metal === 'gold' ? spread * (grams / 10) : spread * (grams / 1000);
+
+  if (priceBasis() === 'mcx') {
+    // MCX quotes gold per 10g and silver per kg, in rupees, already landed —
+    // duty and the dollar are inside that number, so nothing is added here.
+    const m = metal === 'gold' ? state.mcx.gold : state.mcx.silver;
+    if (m) {
+      const perUnit = metal === 'gold' ? grams / 10 : grams / 1000;
+      // MCX gold contracts are 995 purity; silver is 999
+      const contractPurity = metal === 'gold' ? 0.995 : 0.999;
+      return m.price * perUnit * (purity / contractPurity) + perUnitSpread;
+    }
+  }
+
+  if (state.xauusd == null || state.usdinr == null || (metal === 'silver' && state.xagusd == null)) return null;
+  const duty = parseFloat(getSetting('duty_pct') || '6') / 100;
+  const usd = metal === 'gold' ? state.xauusd : state.xagusd;
   return (usd / TROY_OZ) * state.usdinr * grams * purity * (1 + duty) + perUnitSpread;
 }
 
@@ -118,14 +165,20 @@ export function baseInr(metal, purity, grams) {
 export function productRates(product, user = null) {
   const base = baseInr(product.metal, product.purity, product.unit_grams);
   if (base == null) return null;
+  const perUnit = product.metal === 'gold' ? product.unit_grams / 10 : product.unit_grams / 1000;
+
+  // the dealer's own profit: the client buys above the rate and sells below it
+  const marginKey = product.metal === 'gold' ? 'margin_gold' : 'margin_silver';
+  const margin = parseFloat(getSetting(marginKey) || '0') * perUnit;
+
   let clientPrem = 0;
   if (user) {
     clientPrem = product.metal === 'gold'
       ? (user.premium_gold || 0) * (product.unit_grams / 10)
       : (user.premium_silver || 0) * (product.unit_grams / 1000);
   }
-  const buyRate = Math.round(base + product.sell_premium + clientPrem);   // client buys at this
-  const sellRate = Math.round(base - product.buy_premium + clientPrem);   // client sells at this
+  const buyRate  = Math.round(base + margin + product.sell_premium + clientPrem);
+  const sellRate = Math.round(base - margin - product.buy_premium + clientPrem);
   return { buyRate, sellRate };
 }
 
@@ -148,10 +201,26 @@ export function snapshot(user = null) {
     spot: { xauusd: state.xauusd, xagusd: state.xagusd, usdinr: state.usdinr },
     spotAgeMs: state.updatedAt ? Date.now() - state.updatedAt : null,
     fx: { source: state.fxSource, live: state.fxLive,
-          ageMs: state.fxUpdatedAt ? Date.now() - state.fxUpdatedAt : null,
+          ageMs: state.fxQuotedAt ? Date.now() - state.fxQuotedAt
+               : (state.fxUpdatedAt ? Date.now() - state.fxUpdatedAt : null),
           // a daily reference rate older than 26h means the publisher skipped an update
           stale: !state.fxLive && !!state.fxUpdatedAt && (Date.now() - state.fxUpdatedAt > 26*3600_000) },
     gstPct: parseFloat(getSetting('gst_pct') || '3'),
+    // where each number comes from, and whether a second source agrees
+    sources: {
+      basis: priceBasis(),
+      metals: state.simulate ? 'simulated'
+            : (process.env.METALS_DEV_KEY ? 'metals.dev' : 'gold-api.com'),
+      fx: state.fxSource,
+      mcx: state.mcx ? {
+        gold: state.mcx.gold, silver: state.mcx.silver,
+        ageMs: Date.now() - state.mcx.at,
+        movedMsAgo: state.mcxMovedAt ? Date.now() - state.mcxMovedAt : null
+      } : null,
+      mcxError: state.mcxError || null,
+      crossCheck: state.check || null,
+      suspect: !!state.suspect
+    },
     // how long since the international price actually changed. Metals stop moving
     // when the market is shut (weekends, holidays) — that is not a stale feed.
     moved: { goldMsAgo: state.xauMovedAt ? Date.now() - state.xauMovedAt : null,
@@ -189,10 +258,95 @@ export function onTick(fn) { listeners.push(fn); }
 const histStmt = db.prepare('INSERT INTO rate_history(ts,xauusd,xagusd,usdinr,gold_inr_10g,silver_inr_kg) VALUES (?,?,?,?,?,?)');
 let lastHist = 0;
 
+
+// ---------------------------------------------------------------------------
+// MCX — the official Indian exchange. Gold and silver futures in rupees, live
+// through the trading session (about 9am to 11:30pm IST, Monday to Friday).
+// This is what Indian dealers actually quote against, so it is pulled straight
+// rather than worked out from dollars.
+// ---------------------------------------------------------------------------
+async function fetchMcx() {
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    'Referer': 'https://www.mcxindia.com/market-data/market-watch',
+    'Origin': 'https://www.mcxindia.com'
+  };
+  // the exchange's own market-watch feed, the same one its website reads
+  const r = await fetch('https://www.mcxindia.com/backpage.aspx/GetMarketWatch', {
+    method: 'POST', headers: { ...headers, 'Content-Type': 'application/json; charset=UTF-8' }, body: '{}'
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  const rows = JSON.parse(j.d || '[]');
+  const pick = (symbol) => rows
+    .filter(x => x.Symbol === symbol && x.InstrumentName === 'FUTCOM' && Number(x.LTP) > 0)
+    // nearest expiry that is actually trading
+    .sort((a, b) => new Date(a.ExpiryDate) - new Date(b.ExpiryDate))[0];
+  const gold = pick('GOLD') || pick('GOLDM');
+  const silver = pick('SILVER') || pick('SILVERM');
+  if (!gold && !silver) throw new Error('no gold or silver rows');
+  return {
+    gold:   gold   ? { price: Number(gold.LTP),   contract: `${gold.Symbol} ${gold.ExpiryDate}` }     : null,
+    silver: silver ? { price: Number(silver.LTP), contract: `${silver.Symbol} ${silver.ExpiryDate}` } : null,
+    at: Date.now()
+  };
+}
+
+async function pollMcx() {
+  if (state.simulate) return;
+  try {
+    const m = await fetchMcx();
+    // sanity: gold per 10g and silver per kg live in known ranges. A number far
+    // outside them means the feed changed shape, not that the price moved.
+    if (m.gold && (m.gold.price < 20000 || m.gold.price > 2000000)) m.gold = null;
+    if (m.silver && (m.silver.price < 20000 || m.silver.price > 5000000)) m.silver = null;
+    if (!m.gold && !m.silver) throw new Error('values out of range');
+    if (m.gold && state.mcx?.gold?.price !== m.gold.price) state.mcxMovedAt = Date.now();
+    state.mcx = m;
+    state.mcxError = null;
+  } catch (e) {
+    state.mcxError = e.message;
+    console.error('[rates] mcx poll failed:', e.message);
+  }
+}
+
+// A second, independent source so a wrong price cannot pass unnoticed.
+// COMEX futures are not spot — they normally trade a little above it — so this
+// is a sanity check, never a price we quote from.
+async function pollCrossCheck() {
+  if (state.simulate) return;
+  const grab = async (sym) => {
+    const j = await fetchJson(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=1d`,
+      { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; RDgold/1.0)' } });
+    const m = j?.chart?.result?.[0]?.meta;
+    const v = parseFloat(m?.regularMarketPrice);
+    return v > 0 ? { price: v, at: m.regularMarketTime ? m.regularMarketTime * 1000 : Date.now() } : null;
+  };
+  try {
+    const [g, si] = await Promise.all([grab('GC=F').catch(() => null), grab('SI=F').catch(() => null)]);
+    const gap = (a, b) => (a && b) ? Math.abs(a - b) / b : null;
+    state.check = {
+      source: 'COMEX futures (GC=F / SI=F)',
+      gold: g ? g.price : null, silver: si ? si.price : null,
+      at: g ? g.at : null,
+      goldGapPct: g && state.xauusd ? +(gap(g.price, state.xauusd) * 100).toFixed(2) : null,
+      silverGapPct: si && state.xagusd ? +(gap(si.price, state.xagusd) * 100).toFixed(2) : null
+    };
+    // futures sit within a few percent of spot. A bigger gap means one of the
+    // two feeds is wrong, and a wrong feed must never look confident.
+    state.suspect = (state.check.goldGapPct != null && state.check.goldGapPct > 4) ||
+                    (state.check.silverGapPct != null && state.check.silverGapPct > 6);
+    if (state.suspect) console.error('[rates] feeds disagree:', JSON.stringify(state.check));
+  } catch (e) { console.error('[rates] cross-check failed:', e.message); }
+}
+
 export function startRatesEngine({ spotMs = 1000, fxMs = 60000, tickMs = 1000 } = {}) {
-  pollSpot(); pollFx();
+  pollSpot(); pollFx(); pollCrossCheck(); pollMcx();
   setInterval(pollSpot, spotMs);
   setInterval(pollFx, fxMs);
+  setInterval(pollCrossCheck, 60_000);
+  setInterval(pollMcx, 5_000);          // the exchange moves all session; keep up with it
   setInterval(() => {
     if (state.xauusd == null) return;
     for (const fn of listeners) { try { fn(); } catch {} }
