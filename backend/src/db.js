@@ -1,10 +1,27 @@
-import Database from 'better-sqlite3';
+// Storage. With TURSO_DATABASE_URL set, the database lives on Turso and survives
+// every restart, redeploy and sleep. Without it, a local file (dev + tests).
+import Database from 'libsql';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const db = new Database(process.env.DB_PATH || path.join(__dirname, '..', 'bullion.db'));
-db.pragma('journal_mode = WAL');
+const TURSO = process.env.TURSO_DATABASE_URL;
+const db = TURSO
+  ? new Database(TURSO, { authToken: process.env.TURSO_AUTH_TOKEN })
+  : new Database(process.env.DB_PATH || path.join(__dirname, '..', 'bullion.db'));
+console.log(TURSO ? `[db] Turso: ${TURSO.replace(/\/\/.*@/, '//')}` : '[db] local file');
+
+// libsql attaches a _metadata field to every row; keep it out of API responses.
+const _prepare = db.prepare.bind(db);
+const strip = r => { if (r && typeof r === 'object') delete r._metadata; return r; };
+db.prepare = (sql) => {
+  const st = _prepare(sql);
+  const g = st.get.bind(st), a = st.all.bind(st);
+  st.get = (...args) => strip(g(...args));
+  st.all = (...args) => { const rows = a(...args); rows.forEach(strip); return rows; };
+  return st;
+};
+if (!TURSO) db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
 db.exec(`
