@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<title>RDgold</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0F1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RDgold">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#0F1115; --panel:#1A1D24; --panel2:#23262E; --line:#2b2f38;
+  --fg:#ffffff; --mut:#8b90a0; --gold:#D4AF37; --gold-soft:#e6c65c;
+  --grn:#2ECC71; --red:#E74C3C;
+  --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--fg);
+  font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding-top:var(--safe-t);padding-bottom:var(--safe-b);overscroll-behavior-y:none}
+.hide{display:none!important}
+.wrap{max-width:560px;margin:0 auto;padding:0 16px 96px}
+header{display:flex;align-items:center;gap:10px;padding:14px 0 10px;position:sticky;top:0;
+  background:linear-gradient(180deg,var(--bg) 70%,transparent);z-index:5}
+.logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(180deg,var(--gold-soft),var(--gold));
+  color:#161206;font-weight:800;font-size:13px;display:grid;place-items:center}
+header b{font-size:17px;letter-spacing:.2px}
+.badge{margin-left:auto;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--mut)}
+.badge.live{color:var(--grn)} .badge.stale{color:var(--red)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.rate{padding:13px 0;border-bottom:1px solid var(--line)}
+.rate:last-child{border-bottom:0}
+.rate .nm{font-size:14px} .rate .nm small{display:block;color:var(--mut);font-size:11.5px}
+.px{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums;text-align:right;line-height:1.25}
+.px small{display:block;font-size:11px;color:var(--mut);font-weight:400}
+.up{color:var(--grn)} .dn{color:var(--red)}
+.btn{display:block;width:100%;padding:13px;border-radius:11px;border:1px solid var(--line);
+  background:var(--panel2);color:var(--fg);font-size:15px;font-weight:600;cursor:pointer}
+.btn.gold{background:linear-gradient(180deg,var(--gold-soft),var(--gold));color:#161206;border:0}
+.btn.ghost{background:transparent}
+.btn:disabled{opacity:.5}
+.btn2{display:flex;gap:10px} .btn2 .btn{flex:1}
+input,select{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);
+  background:var(--panel2);color:var(--fg);font-size:16px}
+label{display:block;font-size:12px;color:var(--mut);margin:10px 0 5px;letter-spacing:.04em;text-transform:uppercase}
+h2{font-size:17px;margin:4px 0 12px}
+.msg{padding:11px 13px;border-radius:10px;font-size:13.5px;margin-bottom:12px;line-height:1.45}
+.msg.err{background:#3a1d1b;color:#ffb4ad;border:1px solid #5c2b26}
+.msg.ok{background:#15301f;color:#9ee6bd;border:1px solid #235c3c}
+.msg.warn{background:#332a12;color:#ffd98a;border:1px solid #5b4a1d}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:#0f0f12;
+  border-top:1px solid var(--line);padding-bottom:var(--safe-b);z-index:10}
+nav button{flex:1;background:none;border:0;color:var(--mut);font-size:11px;padding:9px 2px 8px;cursor:pointer}
+nav button span{display:block;font-size:17px;line-height:1.35}
+nav button.on{color:var(--gold-soft)}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;z-index:20}
+.sheet .inner{background:var(--panel);width:100%;max-width:560px;margin:0 auto;
+  border-radius:18px 18px 0 0;padding:18px 16px calc(18px + var(--safe-b));border:1px solid var(--line)}
+.tag{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--mut)}
+.big{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums}
+.kv{display:flex;justify-content:space-between;padding:7px 0;font-size:14px}
+.kv span:first-child{color:var(--mut)}
+.timer{height:4px;background:var(--line);border-radius:3px;overflow:hidden;margin:10px 0}
+.timer i{display:block;height:100%;background:var(--gold);width:100%;transition:width .25s linear}
+.list .it{padding:11px 0;border-bottom:1px solid var(--line);font-size:14px}
+.list .it:last-child{border-bottom:0}
+.muted{color:var(--mut)} .sm{font-size:12px}
+.pill{font-size:10.5px;padding:3px 8px;border-radius:99px;background:#ffffff14;color:var(--mut);
+  letter-spacing:.05em;text-transform:uppercase}
+.pill.g{background:#1d4733;color:#86e3b3} .pill.r{background:#4a211d;color:#ffb0a8}
+.center{text-align:center}
+</style>
+</head><body>
+
+<div class="wrap">
+  <header>
+    <div class="logo">RD</div><b style="letter-spacing:3px">RDGOLD</b>
+    <span class="badge" id="badge">connecting</span>
+  </header>
+
+  <!-- AUTH -->
+  <section id="v-auth" class="hide">
+    <div id="authmsg"></div>
+    <div class="card">
+      <h2 id="authTitle">Sign in</h2>
+      <div id="regOnly" class="hide">
+        <label>Your name</label><input id="f-name" autocomplete="name">
+      </div>
+      <label>Phone</label><input id="f-phone" inputmode="tel" autocomplete="tel">
+      <label>Password</label><input id="f-pass" type="password" autocomplete="current-password">
+      <div id="regOnly2" class="hide">
+        <label>City</label><input id="f-city" autocomplete="address-level2">
+        <label>PAN (optional)</label><input id="f-pan">
+        <label>GSTIN (optional)</label><input id="f-gst">
+      </div>
+      <div style="height:14px"></div>
+      <button class="btn gold" id="b-auth">Sign in</button>
+      <div style="height:9px"></div>
+      <button class="btn ghost" id="b-swap">Create an account</button>
+    </div>
+  </section>
+
+  <!-- RATES -->
+  <section id="v-rates" class="hide">
+    <div id="ratemsg"></div>
+    <div class="card" id="ratecard"></div>
+    <div class="card">
+      <div class="row"><span class="tag">Spot</span><span class="sm muted" id="spotline">—</span></div>
+      <div class="sm muted" id="fxline" style="margin-top:8px"></div>
+    </div>
+  </section>
+
+  <!-- ORDERS -->
+  <section id="v-orders" class="hide">
+    <div class="card">
+      <div class="row"><span class="tag">Open exposure</span><b id="expo" class="big" style="font-size:20px">—</b></div>
+      <div class="kv"><span>Margin limit</span><span id="mlimit">—</span></div>
+      <div id="positions" class="list" style="margin-top:6px"></div>
+    </div>
+    <div class="card"><h2>Orders</h2><div id="orderlist" class="list"></div></div>
+  </section>
+
+  <!-- ALERTS -->
+  <section id="v-alerts" class="hide">
+    <div id="alertmsg"></div>
+    <div class="card">
+      <h2>New alert</h2>
+      <label>Product</label><select id="a-prod"></select>
+      <label>When rate goes</label><select id="a-dir"><option value="above">above</option><option value="below">below</option></select>
+      <label>Target rate</label><input id="a-rate" inputmode="decimal">
+      <div style="height:12px"></div>
+      <button class="btn gold" id="b-alert">Create alert</button>
+    </div>
+    <div class="card"><h2>Your alerts</h2><div id="alertlist" class="list"></div></div>
+  </section>
+
+  <!-- MORE -->
+  <section id="v-bank" class="hide">
+    <div class="card">
+      <h2>Bank transfer</h2>
+      <p class="sm muted" style="margin:0 0 10px">Transfer via RTGS/NEFT/IMPS to confirm bookings, then share the UTR on WhatsApp.</p>
+      <div class="kv"><span>Name</span><span id="m-name">—</span></div>
+      <div class="kv"><span>Phone</span><span id="m-phone">—</span></div>
+      <div class="kv"><span>Status</span><span id="m-status">—</span></div>
+      <div class="kv"><span>Margin limit</span><span id="m-margin">—</span></div>
+    </div>
+    <div class="card"><h2>Bank details</h2><div id="bank" class="list"></div></div>
+    <div class="card" id="installcard">
+      <h2>Install RDgold</h2>
+      <p class="sm muted" id="installtext" style="margin:0 0 12px">Add RDgold to your home screen.</p>
+      <button class="btn" id="b-install">Add to home screen</button>
+    </div>
+    <button class="btn ghost" id="b-logout">Sign out</button>
+  </section>
+
+  <!-- ADMIN -->
+  <section id="v-admin" class="hide">
+    <div id="admmsg"></div>
+    <div class="card">
+      <div class="row"><h2 style="margin:0">Clients</h2><span class="sm muted" id="adm-count">—</span></div>
+      <div id="adm-users" class="list" style="margin-top:8px"></div>
+    </div>
+    <div class="card"><h2>Sign-in activity</h2><div id="adm-logins" class="list"></div></div>
+    <div class="card"><h2>All orders</h2><div id="adm-orders" class="list"></div></div>
+    <div class="card">
+      <h2>Controls</h2>
+      <div class="row" style="margin:6px 0 12px">
+        <span>Market</span>
+        <button class="btn" style="width:auto;padding:8px 16px" id="adm-market">—</button>
+      </div>
+      <label>Gold spread (₹ per 10g)</label><input id="adm-sg" inputmode="decimal">
+      <label>Silver spread (₹ per kg)</label><input id="adm-ss" inputmode="decimal">
+      <label>Import duty %</label><input id="adm-duty" inputmode="decimal">
+      <label>GST %</label><input id="adm-gst" inputmode="decimal">
+      <div style="height:12px"></div>
+      <button class="btn gold" id="adm-save">Save settings</button>
+    </div>
+  </section>
+</div>
+
+<nav id="nav" class="hide">
+  <button data-v="rates"  class="on"><span>₹</span>Rates</button>
+  <button data-v="orders"><span>▤</span>Orders</button>
+  <button data-v="alerts"><span>◔</span>Alerts</button>
+  <button data-v="bank"><span>▦</span>Bank</button>
+  <button data-v="admin" id="navAdmin" class="hide"><span>⚙</span>Admin</button>
+</nav>
+
+<div id="sheet" class="sheet hide"><div class="inner" id="sheetInner"></div></div>
+
+<script src="app.js"></script>
+</body></html>

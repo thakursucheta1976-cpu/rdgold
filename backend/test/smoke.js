@@ -172,6 +172,22 @@ ok('bad margin_limit rejected', badMl.status === 400);
 let me = await j(await get('/me', tok));
 ok('/api/me returns profile', me.phone === '9999990001' && me.status === 'active');
 
+// ---- login auditing ----
+let lg = await j(await get('/admin/logins', adm.token));
+ok('logins recorded', Array.isArray(lg) && lg.length > 0, `${Array.isArray(lg)?lg.length:0} entries`);
+ok('login row has who/when', !!(lg[0] && lg[0].phone && lg[0].ts));
+
+await post('/login', {phone:'9999990001', password:'wrong-one'});
+let lg2 = await j(await get('/admin/logins', adm.token));
+ok('failed attempt recorded', lg2.length > lg.length && lg2[0].ok === 0);
+
+let us = await j(await get('/admin/users', adm.token));
+let row = us.find(u => u.phone === '9999990001');
+ok('user shows last_login', !!(row && row.last_login), `count=${row && row.login_count}`);
+
+let notadmin = await get('/admin/logins', tok);
+ok('logins are admin-only', notadmin.status === 403);
+
 // ---- rate freshness is reported, not hidden ----
 let fr = await j(await get('/rates'));
 ok('spot age reported', typeof fr.spotAgeMs === 'number' && fr.spotAgeMs < 10000, `age=${fr.spotAgeMs}ms`);
@@ -200,8 +216,23 @@ ok('CORS preflight 204', pf.status === 204 && pf.headers.get('access-control-all
 let ch = await fetch(B+'/rates/history?hours=1', { headers:{ Origin:'https://thefactual.github.io' } });
 ok('CORS header on /api/rates/history', ch.headers.get('access-control-allow-origin') !== null);
 
-let nocors = await fetch(B+'/me', { headers:{ Origin:'https://evil.example', Authorization:'Bearer '+tok } });
-ok('no CORS on private endpoints', nocors.headers.get('access-control-allow-origin') === null);
+let evil = await fetch(B+'/me', { headers:{ Origin:'https://evil.example', Authorization:'Bearer '+tok } });
+ok('unknown origin gets no CORS on private endpoints', evil.headers.get('access-control-allow-origin') === null);
+
+let good = await fetch(B+'/me', { headers:{ Origin:'http://localhost:8091', Authorization:'Bearer '+tok } });
+ok('app origin allowed on private endpoints', good.headers.get('access-control-allow-origin') === 'http://localhost:8091');
+
+let lpf = await fetch(B+'/login', { method:'OPTIONS', headers:{ Origin:'http://localhost:8091',
+  'Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type' } });
+ok('login preflight passes for the app origin', lpf.status === 204 &&
+   (lpf.headers.get('access-control-allow-headers')||'').toLowerCase().includes('content-type'));
+
+let evilpf = await fetch(B+'/login', { method:'OPTIONS', headers:{ Origin:'https://evil.example',
+  'Access-Control-Request-Method':'POST' } });
+ok('login preflight refused for unknown origin', evilpf.headers.get('access-control-allow-origin') === null);
+
+let pubAny = await fetch(B+'/rates', { headers:{ Origin:'https://anything.example' } });
+ok('public rates still open to any origin', pubAny.headers.get('access-control-allow-origin') === '*');
 
 console.log(fails === 0 ? '\nALL TESTS PASSED' : `\n${fails} FAILURES`);
 process.exit(fails === 0 ? 0 : 1);

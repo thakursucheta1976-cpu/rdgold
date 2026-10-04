@@ -32,15 +32,7 @@ h1 .rd{color:var(--gold)}
 .btn-gold{background:linear-gradient(180deg,var(--gold-soft),var(--gold));color:#161206}
 .btn-ghost{border:1px solid var(--line);color:var(--fg)}
 .note{font-size:12.5px;color:var(--mut);margin-top:12px}
-/* live rate card */
-.ratecard{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;max-width:440px;margin:44px auto 0;text-align:left}
-.ratecard .hd{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--mut);letter-spacing:.08em;text-transform:uppercase}
 .live{color:var(--grn);font-weight:600}
-.rate-row{display:flex;justify-content:space-between;align-items:baseline;padding:13px 0;border-bottom:1px solid var(--line)}
-.rate-row:last-child{border-bottom:0}
-.rate-row .n{font-size:15px}
-.rate-row .n small{display:block;color:var(--mut);font-size:12px}
-.rate-row .v{font-family:var(--disp);font-size:24px;font-weight:700;color:var(--gold-soft);font-variant-numeric:tabular-nums}
 /* sections */
 section{padding:44px 0;border-top:1px solid var(--line)}
 h2{font-family:var(--disp);font-weight:700;font-size:28px;margin:0 0 22px;text-align:center;text-wrap:balance}
@@ -67,40 +59,27 @@ footer{border-top:1px solid var(--line);padding:28px 0 36px;text-align:center;co
 }
 </style>
 
-</head><body><div class="ticker" id="ticker">
-  <span>GOLD 999 <b id="t-g">—</b>/10g</span>
-  <span>SILVER 999 <b id="t-s">—</b>/kg</span>
-  <span>USD/INR <b id="t-fx">—</b></span>
-  <span>Market <b class="up" id="t-ses">OPEN</b></span>
-</div>
-
+</head><body>
 <div class="wrap">
 <header>
   <div class="mark">RD</div>
   <h1><span class="rd">RD</span>gold</h1>
-  <p class="tag">Live bullion rates and instant booking from your trusted dealer. Gold 999 &amp; 995, silver 999 — transparent premiums, 30-second locked rates, delivery you can track.</p>
+  <p class="tag">Live gold and silver rates on your phone, straight from your dealer.
+    Watch the market, then call to book — the rate is fixed with us on the call.</p>
   <div class="cta-row">
-    <a class="btn btn-gold" href="https://github.com/thakursucheta1976-cpu/rdgold/releases/latest/download/rdgold.apk" id="dl" download>⬇ Download for Android</a>
-    <a class="btn" href="#iphone" id="dl-ios">⬇ Get it on iPhone</a>
+    <a class="btn btn-gold" href="app/">Open the app</a>
+    <a class="btn" href="#install">Install on your phone</a>
     <a class="btn btn-ghost" href="#how">How it works</a>
   </div>
-  <p class="note">Free APK · Android 8.0+ · no ads, no trackers</p>
-
-  <div class="ratecard">
-    <div class="hd"><span>Indicative rates</span><span class="live" id="livebadge">● LIVE</span></div>
-    <div class="rate-row"><div class="n">Gold 999<small>per 10 grams, ex-GST</small></div><div class="v" id="r-g999">—</div></div>
-    <div class="rate-row"><div class="n">Gold 995<small>per 10 grams, ex-GST</small></div><div class="v" id="r-g995">—</div></div>
-    <div class="rate-row"><div class="n">Silver 999<small>per kilogram, ex-GST</small></div><div class="v" id="r-s999">—</div></div>
-    <div id="fxnote" style="font-size:12px;color:var(--mut);padding-top:12px;line-height:1.5"></div>
-  </div>
+  <p class="note">Works on iPhone and Android · no app store · no ads, no trackers</p>
 </header>
 
 <section>
   <h2>Built for serious bullion buyers</h2>
   <div class="grid">
-    <div class="card"><h3><span class="dot"></span>Locked-rate booking</h3><p>Tap buy or sell and your rate freezes for 30 seconds while you confirm. The rate you see is the rate you get — GST shown separately, nothing hidden.</p></div>
-    <div class="card"><h3><span class="dot"></span>Limit orders</h3><p>Set your target rate and walk away. Your order fills automatically the moment the market touches your level — never on stale prices.</p></div>
-    <div class="card"><h3><span class="dot"></span>Live every 5 seconds</h3><p>International spot, USD/INR and your landed INR rate stream in real time, with a clear stale-rate warning if the feed ever lags.</p></div>
+    <div class="card"><h3><span class="dot"></span>Book on a call</h3><p>See the live rate, pick your quantity, then tap to call or WhatsApp us. The rate is fixed with you on the call — nothing is executed behind your back.</p></div>
+    <div class="card"><h3><span class="dot"></span>Rate alerts</h3><p>Set the level you want. We ping you the moment gold or silver touches it, so you can call at the right time instead of watching all day.</p></div>
+    <div class="card"><h3><span class="dot"></span>Live every second</h3><p>International spot, USD/INR and your landed rupee rate, refreshed every second. If the feed ever lags, the app says so instead of showing you an old number.</p></div>
     <div class="card"><h3><span class="dot"></span>Rate alerts</h3><p>Get pinged when gold crosses your number — above or below, any product.</p></div>
     <div class="card"><h3><span class="dot"></span>Position &amp; history</h3><p>Every trade, your net position and your margin limit in one clean ledger.</p></div>
     <div class="card"><h3><span class="dot"></span>Direct settlement</h3><p>RTGS/NEFT/IMPS details inside the app. Transfer, share your UTR on WhatsApp, collect your metal.</p></div>
@@ -110,9 +89,9 @@ footer{border-top:1px solid var(--line);padding:28px 0 36px;text-align:center;co
 <section id="how">
   <h2>From download to delivery</h2>
   <div class="steps">
-    <div class="step"><b>Install &amp; register</b><span>Download the APK, sign up with your mobile number and PAN/GSTIN.</span></div>
-    <div class="step"><b>Get approved</b><span>We verify your KYC and set your trading limit — usually same day.</span></div>
-    <div class="step"><b>Book your rate</b><span>Watch live rates, lock one for 30 seconds, confirm your quantity.</span></div>
+    <div class="step"><b>Install &amp; register</b><span>Add RDgold to your home screen, then sign up with your mobile number and PAN/GSTIN.</span></div>
+    <div class="step"><b>Get approved</b><span>We verify your KYC and switch your account on — usually same day.</span></div>
+    <div class="step"><b>Call to book</b><span>Watch the live rate, then tap to call. We fix the rate with you on the phone.</span></div>
     <div class="step"><b>Pay &amp; collect</b><span>Transfer via RTGS/NEFT, send the UTR, and track your order to delivery.</span></div>
   </div>
 </section>
@@ -121,8 +100,7 @@ footer{border-top:1px solid var(--line);padding:28px 0 36px;text-align:center;co
   <h2>Get the app</h2>
   <div class="card">
     <p style="color:var(--mut);margin:0 0 16px">Direct APK download — install in under a minute.</p>
-    <a class="btn btn-gold" href="https://github.com/thakursucheta1976-cpu/rdgold/releases/latest/download/rdgold.apk" download>⬇ Download RDgold APK</a>
-    <a class="btn" href="#iphone">⬇ Get it on iPhone</a>
+    <a class="btn btn-gold" href="app/">Open RDgold</a>
     <div class="chips">
       <span class="chip">Android 8.0+</span><span class="chip">~20 MB</span><span class="chip">v1.0.0</span><span class="chip">Free</span>
     </div>
@@ -131,122 +109,26 @@ footer{border-top:1px solid var(--line);padding:28px 0 36px;text-align:center;co
 </section>
 
 
-<section id="iphone" style="max-width:720px;margin:72px auto 0;padding:0 20px">
-  <h2 style="font-family:var(--disp);font-size:26px;margin-bottom:14px">RDgold on iPhone</h2>
+<section id="install" style="max-width:720px;margin:72px auto 0;padding:0 20px">
+  <h2 style="font-family:var(--disp);font-size:26px;margin-bottom:14px">Put RDgold on your home screen</h2>
   <p style="color:var(--mut);line-height:1.7;font-size:15px">
-    RDgold is not on the App Store. On iPhone you install it straight from this site —
-    it runs full screen with its own icon, same live rates, same booking.
+    One app for both phones. It installs from this page — full screen, its own icon,
+    live rates inside. No App Store, no Play Store, nothing to update.
   </p>
-  <ol style="color:var(--mut);line-height:1.9;font-size:15px;padding-left:20px;margin-top:14px">
-    <li>Open <b style="color:var(--fg)">this page in Safari</b> (iOS only lets Safari install web apps).</li>
-    <li>Tap the <b style="color:var(--fg)">Share</b> button.</li>
-    <li>Choose <b style="color:var(--fg)">Add to Home Screen</b>.</li>
-  </ol>
-  <p style="margin-top:18px"><a class="btn btn-gold" href="app/">Open RDgold web app</a></p>
-  <p style="color:var(--mut);font-size:13px;margin-top:14px;line-height:1.6">
-    Android can use the web app too, but the APK above runs better.
+  <p style="color:var(--mut);line-height:1.9;font-size:15px;margin-top:14px">
+    <b style="color:var(--fg)">iPhone</b> — open this page in Safari, tap Share, then Add to Home Screen.<br>
+    <b style="color:var(--fg)">Android</b> — open this page in Chrome, tap the menu, then Install app.
   </p>
+  <p style="margin-top:18px"><a class="btn btn-gold" href="app/">Open RDgold</a></p>
 </section>
 
 <footer>
   RDgold · bullion rates &amp; booking<br>
-  Rates shown are indicative, ex-GST; final rate locked in-app at booking. All sales are firm contracts with physical delivery.<br>
+  Rates shown in the app are indicative, ex-GST; the final rate is agreed on the call. All sales are firm contracts with physical delivery.<br>
   WhatsApp: +91 00000 00000 · Mumbai, India
 </footer>
 </div>
 
-<script>
-/* ---------------------------------------------------------------------------
-   Live rates for the website ticker.
-   Set API to your deployed backend. Override in a browser with ?api=https://...
-   If the backend is unreachable (or still waking on Render free tier) the page
-   falls back to indicative demo values and the badge says INDICATIVE.
---------------------------------------------------------------------------- */
-(function(){
-  var API = (new URLSearchParams(location.search).get('api')
-             || 'https://rdgold-backend.onrender.com').replace(/\/+$/,'');
 
-  var demo = { g999:118650, g995:118170, s999:152300, fx:88.40 };
-  var cur  = Object.assign({}, demo);
-  var mode = 'demo';          // demo | live | stale
-  var open = true;
-  var fx   = null;            // {source, live, ageMs, stale} from the backend
-  var el = function(id){ return document.getElementById(id); };
-  var fmt = function(n){ return n==null ? '—' : '₹'+Math.round(n).toLocaleString('en-IN'); };
-
-  function paint(){
-    el('r-g999').textContent = fmt(cur.g999);
-    el('r-g995').textContent = fmt(cur.g995);
-    el('r-s999').textContent = fmt(cur.s999);
-    el('t-g').textContent    = fmt(cur.g999);
-    el('t-s').textContent    = fmt(cur.s999);
-    el('t-fx').textContent   = cur.fx ? cur.fx.toFixed(2) : '—';
-
-    var b = el('livebadge');
-    if (mode === 'live')      { b.textContent = '● LIVE';       b.style.color = 'var(--grn)'; }
-    else if (mode === 'stale'){ b.textContent = '● STALE';      b.style.color = 'var(--red)'; }
-    else                      { b.textContent = '● INDICATIVE'; b.style.color = 'var(--mut)'; }
-
-    var ses = el('t-ses');
-    if (ses){ ses.textContent = open ? 'OPEN' : 'CLOSED';
-              ses.className   = open ? 'up' : 'dn'; }
-
-    var note = el('fxnote');
-    if (note){
-      if (mode !== 'live' || !fx) { note.textContent = ''; }
-      else if (fx.live) {
-        note.textContent = 'Metals and USD/INR both live.';
-        note.style.color = 'var(--mut)';
-      } else {
-        var hrs = fx.ageMs ? Math.round(fx.ageMs / 3600000) : null;
-        note.textContent = 'Metals live every second. USD/INR is a daily reference rate'
-          + (hrs !== null ? ' (' + hrs + 'h old)' : '') + ', not intraday.';
-        note.style.color = 'var(--red)';
-      }
-    }
-  }
-
-  function pick(list, code){
-    for (var i=0;i<list.length;i++) if (list[i].code === code) return list[i];
-    return null;
-  }
-
-  function pull(){
-    var ctl = new AbortController();
-    var kill = setTimeout(function(){ ctl.abort(); }, 9000);
-    fetch(API + '/api/rates', { signal: ctl.signal, cache: 'no-store' })
-      .then(function(r){ if(!r.ok) throw 0; return r.json(); })
-      .then(function(d){
-        var ps = d.products || [];
-        var g9 = pick(ps,'GOLD999'), g5 = pick(ps,'GOLD995'), s9 = pick(ps,'SILVER999');
-        if (!g9 || g9.buy == null) throw 0;            // engine has no price yet
-        cur = { g999: g9.buy,
-                g995: g5 ? g5.buy : null,
-                s999: s9 ? s9.buy : null,
-                fx:   d.spot ? d.spot.usdinr : null };
-        open = d.marketOpen !== false;
-        fx   = d.fx || null;
-        mode = d.stale ? 'stale' : 'live';
-        paint();
-      })
-      .catch(function(){
-        if (mode === 'demo') wiggle();               // never been live → keep demo moving
-        else { mode = 'stale'; paint(); }            // was live → say so, keep last price
-      })
-      .finally(function(){ clearTimeout(kill); });
-  }
-
-  function wiggle(){
-    var w = function(){ return (Math.random()-0.5)*0.0006; };
-    cur.g999 *= 1+w(); cur.g995 *= 1+w(); cur.s999 *= 1+w();
-    cur.fx   *= 1+(Math.random()-0.5)*0.0001;
-    paint();
-  }
-
-  paint();
-  pull();
-  setInterval(pull, 1000);
-})();
-</script>
 
 </body></html>

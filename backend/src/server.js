@@ -21,16 +21,39 @@ const app = express();
 app.use(express.json());
 app.use('/admin', express.static(path.join(__dirname, '..', 'public')));
 
-// ---------- CORS: public rate endpoints only (website ticker is on another origin) ----------
+// ---------- CORS ----------
+// The web app runs on a different origin (Pages / Cloudflare) from this API, so
+// every endpoint it calls needs CORS. Authenticated routes are restricted to an
+// allow-list; the public rate feed stays open so the marketing ticker works anywhere.
 const PUBLIC_CORS = new Set(['/api/rates', '/api/rates/history']);
+const ALLOWED = (process.env.WEB_ORIGIN || '')
+  .split(',').map(o => o.trim().replace(/\/+$/, '')).filter(Boolean);
+
+function originAllowed(o) {
+  if (!o) return false;
+  const clean = o.replace(/\/+$/, '');
+  if (ALLOWED.includes(clean)) return true;
+  // local development
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(clean);
+}
+
 app.use((req, res, next) => {
-  if (PUBLIC_CORS.has(req.path) && (req.method === 'GET' || req.method === 'OPTIONS')) {
-    res.set('Access-Control-Allow-Origin', process.env.WEB_ORIGIN || '*');
-    res.set('Vary', 'Origin');
-    res.set('Access-Control-Allow-Headers', 'Authorization,Content-Type');
-    res.set('Access-Control-Max-Age', '600');
-    if (req.method === 'OPTIONS') return res.sendStatus(204);
+  const origin = req.headers.origin;
+  const isPublic = PUBLIC_CORS.has(req.path);
+
+  if (isPublic && (req.method === 'GET' || req.method === 'OPTIONS')) {
+    res.set('Access-Control-Allow-Origin', '*');
+  } else if (originAllowed(origin)) {
+    res.set('Access-Control-Allow-Origin', origin);
+  } else {
+    return next();                       // no CORS headers: browser blocks it
   }
+
+  res.set('Vary', 'Origin');
+  res.set('Access-Control-Allow-Headers', 'Authorization,Content-Type');
+  res.set('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS');
+  res.set('Access-Control-Max-Age', '600');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
 
@@ -76,12 +99,28 @@ app.post('/api/register', (req, res) => {
   }
 });
 
+function clientIp(req) {
+  const f = (req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return f || req.socket?.remoteAddress || null;
+}
+const recordLogin = db.prepare('INSERT INTO logins(user_id,ip,agent,ok) VALUES (?,?,?,?)');
+
 app.post('/api/login', (req, res) => {
   const { phone, password } = req.body || {};
   const u = db.prepare('SELECT * FROM users WHERE phone=?').get((phone || '').trim());
-  if (!u || !bcrypt.compareSync(password || '', u.password_hash))
+  const ip = clientIp(req), agent = (req.headers['user-agent'] || '').slice(0, 200);
+  if (!u || !bcrypt.compareSync(password || '', u.password_hash)) {
+    if (u) { try { recordLogin.run(u.id, ip, agent, 0); } catch {} }   // failed attempt, for the audit trail
     return res.status(401).json({ error: 'invalid credentials' });
-  if (u.status === 'blocked') return res.status(403).json({ error: 'account blocked' });
+  }
+  if (u.status === 'blocked') {
+    try { recordLogin.run(u.id, ip, agent, 0); } catch {}
+    return res.status(403).json({ error: 'account blocked' });
+  }
+  try {
+    recordLogin.run(u.id, ip, agent, 1);
+    db.prepare("UPDATE users SET last_login=datetime('now'), login_count=login_count+1 WHERE id=?").run(u.id);
+  } catch {}
   res.json({ token: sign(u), user: pub(u) });
 });
 
@@ -254,7 +293,15 @@ app.delete('/api/alerts/:id', auth(), (req, res) => {
 
 // ---------- admin ----------
 app.get('/api/admin/users', auth('admin'), (req, res) =>
-  res.json(db.prepare('SELECT id,phone,name,role,status,margin_limit,premium_gold,premium_silver,kyc_pan,kyc_city,created_at FROM users ORDER BY id DESC').all()));
+  res.json(db.prepare(`SELECT id,phone,name,role,status,margin_limit,premium_gold,premium_silver,
+      kyc_pan,kyc_city,created_at,last_login,login_count FROM users ORDER BY id DESC`).all()));
+
+// who signed in, when, from where
+app.get('/api/admin/logins', auth('admin'), (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit || '100'), 500);
+  res.json(db.prepare(`SELECT l.id, l.ts, l.ip, l.agent, l.ok, u.name, u.phone
+    FROM logins l JOIN users u ON u.id = l.user_id ORDER BY l.id DESC LIMIT ?`).all(limit));
+});
 
 app.patch('/api/admin/users/:id', auth('admin'), (req, res) => {
   const allowed = ['status', 'margin_limit', 'premium_gold', 'premium_silver', 'role'];

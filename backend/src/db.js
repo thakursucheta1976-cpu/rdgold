@@ -8,6 +8,15 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
 db.exec(`
+CREATE TABLE IF NOT EXISTS logins (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  ts TEXT NOT NULL DEFAULT (datetime('now')),
+  ip TEXT,
+  agent TEXT,
+  ok INTEGER NOT NULL DEFAULT 1
+);
+
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   phone TEXT UNIQUE NOT NULL,
@@ -104,6 +113,12 @@ const seedProducts = db.prepare(`INSERT OR IGNORE INTO products
 seedProducts.run('GOLD999', 'Gold 999 (10g)', 'gold', 0.999, '10g', 10, 1, 1000, 150, 100);
 seedProducts.run('GOLD995', 'Gold 995 (10g)', 'gold', 0.995, '10g', 10, 1, 1000, 100, 80);
 seedProducts.run('SILVER999', 'Silver 999 (1kg)', 'silver', 0.999, '1kg', 1000, 1, 500, 300, 200);
+
+
+// --- migrations: columns added after the first release ---
+const cols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
+if (!cols.includes('last_login'))  db.exec("ALTER TABLE users ADD COLUMN last_login TEXT");
+if (!cols.includes('login_count')) db.exec("ALTER TABLE users ADD COLUMN login_count INTEGER NOT NULL DEFAULT 0");
 
 export default db;
 export function getSetting(key) {
