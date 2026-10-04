@@ -6,6 +6,12 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TURSO = process.env.TURSO_DATABASE_URL;
+if (TURSO && !process.env.TURSO_AUTH_TOKEN) {
+  console.error('FATAL: TURSO_DATABASE_URL is set but TURSO_AUTH_TOKEN is empty.');
+  console.error('       Paste the token from Turso into TURSO_AUTH_TOKEN, or clear');
+  console.error('       TURSO_DATABASE_URL to go back to the local database.');
+  process.exit(1);
+}
 const db = TURSO
   ? new Database(TURSO, { authToken: process.env.TURSO_AUTH_TOKEN })
   : new Database(process.env.DB_PATH || path.join(__dirname, '..', 'bullion.db'));
@@ -22,7 +28,9 @@ db.prepare = (sql) => {
   return st;
 };
 if (!TURSO) db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+// Turso rejects some pragmas; never let one stop the server booting.
+try { db.pragma('foreign_keys = ON'); }
+catch (e) { console.warn('[db] foreign_keys pragma skipped:', e.message); }
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS logins (
