@@ -179,15 +179,7 @@ app.get('/api/rates/history', (req, res) => {
 });
 
 app.get('/api/config', (req, res) => {
-  let bank = {};
-  try { bank = JSON.parse(getSetting('bank_details')); } catch {}
-  if (!bank || typeof bank !== 'object') bank = {};
-  res.json({ dealerPhone: getSetting('dealer_phone') || '', bank });
-});
-
-app.get('/api/bank-details', (req, res) => {
-  try { res.json(JSON.parse(getSetting('bank_details'))); }
-  catch { res.json({}); }
+  res.json({ dealerPhone: getSetting('dealer_phone') || '' });
 });
 
 app.get('/api/me', auth(), (req, res) => res.json(pub(req.user)));
@@ -427,7 +419,7 @@ app.get('/api/admin/settings', auth('admin'), (req, res) => {
 });
 const NUMERIC_SETTINGS = ['duty_pct', 'gst_pct', 'global_spread_gold', 'global_spread_silver',
                           'cash_gold_rate', 'cash_silver_rate'];
-const ALLOWED_SETTINGS = [...NUMERIC_SETTINGS, 'market_open', 'bank_details', 'dealer_phone'];
+const ALLOWED_SETTINGS = [...NUMERIC_SETTINGS, 'market_open', 'dealer_phone'];
 app.patch('/api/admin/settings', auth('admin'), (req, res) => {
   for (const [k, v] of Object.entries(req.body || {})) {
     if (!ALLOWED_SETTINGS.includes(k)) return res.status(400).json({ error: `unknown setting ${k}` });
@@ -436,10 +428,6 @@ app.patch('/api/admin/settings', auth('admin'), (req, res) => {
     if (k === 'dealer_phone') {
       const t = String(v).trim();
       if (t && !/^\+?[0-9][0-9 -]{6,18}$/.test(t)) return res.status(400).json({ error: 'bad dealer_phone' });
-    }
-    if (k === 'bank_details') {
-      const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
-      try { JSON.parse(s); } catch { return res.status(400).json({ error: 'bank_details must be JSON' }); }
     }
   }
   for (const [k, v] of Object.entries(req.body || {})) setSetting(k, typeof v === 'object' ? JSON.stringify(v) : v);

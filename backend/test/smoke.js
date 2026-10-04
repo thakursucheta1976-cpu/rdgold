@@ -97,9 +97,6 @@ let rPers = await j(await get('/rates', tok));
 let rPub = await j(await get('/rates'));
 ok('per-client premium applied', rPers.products[0].buy - rPub.products[0].buy >= 490, `Δ=${rPers.products[0].buy - rPub.products[0].buy}`);
 
-// bank details public
-let bank = await j(await get('/bank-details'));
-ok('bank details served', !!bank.ifsc);
 
 // admin auth boundaries
 let noadm = await get('/admin/users', tok);
@@ -144,8 +141,8 @@ let badSet = await patch('/admin/settings', {gst_pct:'oops'}, adm.token);
 ok('bad gst_pct rejected', badSet.status === 400);
 let unkSet = await patch('/admin/settings', {evil_key:'1'}, adm.token);
 ok('unknown setting rejected', unkSet.status === 400);
-let badBank = await patch('/admin/settings', {bank_details:'not json'}, adm.token);
-ok('bad bank_details rejected', badBank.status === 400);
+let unknownSetting = await patch('/admin/settings', {bank_details:'{}'}, adm.token);
+ok('removed settings are rejected', unknownSetting.status === 400);
 
 // alert input validation
 let badAlert = await post('/alerts', {productCode:'GOLD999', direction:'above', targetRate: true}, tok);
@@ -274,7 +271,8 @@ ok('public rates still open to any origin', pubAny.headers.get('access-control-a
 
 // ---- profile + dealer phone ----
 let cfg0 = await j(await get('/config'));
-ok('config endpoint public', typeof cfg0.dealerPhone === 'string' && typeof cfg0.bank === 'object');
+ok('config endpoint public', typeof cfg0.dealerPhone === 'string');
+ok('no bank details anywhere', cfg0.bank === undefined && (await get('/bank-details')).status === 404);
 
 let setPh = await patch('/admin/settings', { dealer_phone: '+919876543210' }, adm.token);
 ok('admin can set dealer phone', setPh.status === 200);

@@ -130,10 +130,6 @@ set.run('global_spread_gold', '0');  // INR per 10g adjustment to track MCX
 set.run('global_spread_silver', '0');
 set.run('market_open', 'true');      // admin kill-switch
 set.run('dealer_phone', '');         // number clients call / WhatsApp to book
-set.run('bank_details', JSON.stringify({
-  account_name: 'Your Bullion Pvt Ltd', account_no: '0000000000', ifsc: 'HDFC0000000',
-  bank: 'HDFC Bank', branch: 'Mumbai', upi: '', whatsapp: '+91', phone: '+91'
-}));
 
 const seedProducts = db.prepare(`INSERT OR IGNORE INTO products
   (code,name,metal,purity,unit,unit_grams,min_qty,max_qty,sell_premium,buy_premium)

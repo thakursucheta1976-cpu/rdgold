@@ -200,7 +200,6 @@ function paintRates(d) {
 /* ---------------- booking (by phone) ----------------
    Rates are shown live. Orders are agreed on a call, not executed in the app. */
 let DEALER_PHONE = window.RDGOLD_PHONE || '';
-let BANK = {};
 const sheet = $('sheet'), sheetInner = $('sheetInner');
 function closeSheet() { sheet.classList.add('hide'); sheetInner.innerHTML = ''; }
 sheet.onclick = e => { if (e.target === sheet) closeSheet(); };
@@ -297,7 +296,6 @@ async function loadConfig() {
   try {
     const c = await api('/api/config', { auth: false });
     DEALER_PHONE = c.dealerPhone || DEALER_PHONE;
-    BANK = c.bank || {};
   } catch {}
 }
 
@@ -315,11 +313,6 @@ function loadProfile() {
   $('p-pan').value     = u.pan     || '';
   $('p-gst').value     = u.gst     || '';
   $('p-address').value = u.address || '';
-
-  const keys = Object.keys(BANK || {});
-  $('bank').innerHTML = keys.length
-    ? keys.map(k => `<div class="it row"><span class="muted">${esc(k.replace(/_/g, ' '))}</span><b>${esc(BANK[k])}</b></div>`).join('')
-    : '<div class="muted sm">Not published yet.</div>';
 }
 
 $('p-save').onclick = async () => {
