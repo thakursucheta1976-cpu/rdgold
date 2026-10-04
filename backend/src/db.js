@@ -133,8 +133,7 @@ set.run('margin_gold', '0');     // dealer's own profit, INR per 10g (buy above 
 set.run('margin_silver', '0');   // same, INR per kg
 set.run('market_open', 'true');
 set.run('price_basis', 'auto');  // auto | mcx | india (NSE anchor) | spot
-set.run('etf_factor_gold', '0');    // set by calibrating to today's real rate
-set.run('etf_factor_silver', '0');
+
 set.run('dealer_phone', '');         // number clients call / WhatsApp to book
 
 const seedProducts = db.prepare(`INSERT OR IGNORE INTO products

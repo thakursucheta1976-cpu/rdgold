@@ -170,7 +170,8 @@ const num = n => n == null ? '—' : Math.round(n).toLocaleString('en-IN');
 // say plainly where the numbers come from — a futures contract is not spot
 function basisLine(d) {
   const s = d.sources || {};
-  if (s.basis === 'mcx') return 'Live Mumbai rate, tracking MCX second by second.';
+  if (s.basis === 'mcx')   return 'Live Mumbai rate, tracking MCX second by second.';
+  if (s.basis === 'india') return 'Indian benchmark rate, moving live with the market.';
   return 'Live international rate converted at today\'s USD/INR.';
 }
 // "GOLD 04DEC2026" -> "Gold Dec 2026 futures"
@@ -504,7 +505,8 @@ function showBasis() {
   if (s.basis === 'mcx' && s.mcx) {
     el.innerHTML = `<b>MCX live</b> — gold ${fmt(s.mcx.gold && s.mcx.gold.price)}, silver ${fmt(s.mcx.silver && s.mcx.silver.price)}.`;
   } else if (s.basis === 'india' && s.india) {
-    el.innerHTML = `<b>Indian market live (NSE)</b> — matching ${fmt(s.india.impliedGold)} per 10g.`;
+    el.innerHTML = `<b>Indian benchmark, live</b> — IBJA ${fmt(s.india.ibjaGold999)} per 10g
+      (${esc(s.india.published || 'today')}), moving with the market to ${fmt(s.india.liveGold)} now.`;
   } else {
     const why = s.mcxError ? `MCX unreachable (${esc(s.mcxError)})` : 'MCX unreachable';
     el.innerHTML = `<b>International spot</b> — ${why}. Set your carry &amp; premium below to match your board.`;

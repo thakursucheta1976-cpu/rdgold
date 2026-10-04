@@ -6,7 +6,7 @@ process.env.DB_PATH = '/tmp/bullion-test-' + Date.now() + '.db';
 process.env.ADMIN_PASSWORD = 'admin1234';
 
 await import('../src/server.js');
-const { __setMcxForTest } = await import('../src/rates.js');
+const { __setMcxForTest, parseIbja } = await import('../src/rates.js');
 await new Promise(r => setTimeout(r, 1500)); // let rates engine tick
 
 const B = 'http://localhost:8099/api';
@@ -446,15 +446,21 @@ ok('every settings row can be read back', hz2.settingsReadable === hz2.settingsR
 ok('the cached and fresh reads agree', hz2.marketOpen === (hz2.marketOpenFresh === 'true'),
    `cached ${hz2.marketOpen} fresh ${hz2.marketOpenFresh}`);
 
-// ---- the Indian live anchor (NSE ETF) and its one-time calibration ----
-let calNoQuote = await post('/admin/calibrate', { metal: 'gold', rate: 148140 }, adm.token);
-ok('calibration refuses without a live NSE quote', calNoQuote.status === 400);
-let calBadMetal = await post('/admin/calibrate', { metal: 'copper', rate: 1 }, adm.token);
-ok('calibration rejects an unknown metal', calBadMetal.status === 400);
-let calBadRate = await post('/admin/calibrate', { metal: 'gold', rate: 0 }, adm.token);
-ok('calibration rejects a zero rate', calBadRate.status === 400);
-let calClient = await post('/admin/calibrate', { metal: 'gold', rate: 148140 }, ctok);
-ok('only admins can calibrate', calClient.status === 403);
+// ---- reading the IBJA benchmark board ----
+const IBJA_PAGE = `<div><span>999 Purity</span><b> 14814 </b>(1 Gram)</div>
+  <div>995 Purity <b>14755</b> (1 Gram)</div><div>916 Purity 13569 (1 Gram)</div>
+  <div>04/10/2026 10:30:02 AM</div>
+  <table><tr><td>01/10/2026</td><td>148687</td><td>148092</td><td>136197</td>
+  <td>111515</td><td>86982</td><td>221954</td><td>59024</td></tr></table>`;
+const board = parseIbja(IBJA_PAGE);
+ok('IBJA gold 999 read as a 10g rate', board.gold999 === 148140, String(board.gold999));
+ok('IBJA gold 995 read as a 10g rate', board.gold995 === 147550, String(board.gold995));
+ok('IBJA silver read as a kg rate', board.silver === 221954, String(board.silver));
+ok('IBJA publish time read', board.published === '04/10/2026 10:30:02 AM');
+ok('a broken page returns nothing rather than a wrong price', parseIbja('<html>down for maintenance</html>') === null);
+ok('an empty page returns nothing', parseIbja('') === null);
+ok('a silly number is thrown away',
+   parseIbja('<div>999 Purity 7 (1 Gram)</div>').gold999 === null);
 
 console.log(fails === 0 ? '\nALL TESTS PASSED' : `\n${fails} FAILURES`);
 process.exit(fails === 0 ? 0 : 1);
