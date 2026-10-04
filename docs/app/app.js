@@ -12,6 +12,17 @@ const esc = s => String(s == null ? '' : s)
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
+// one account is tied to one phone: this id identifies the handset
+const DEVICE_ID = (() => {
+  let d = localStorage.getItem('rdgold.device');
+  if (!d) {
+    d = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2))
+          .replace(/[^A-Za-z0-9_-]/g, '');
+    localStorage.setItem('rdgold.device', d);
+  }
+  return d;
+})();
+
 let token   = localStorage.getItem('rdgold.token') || null;
 let me      = null;
 let snap    = null;     // last rates snapshot
@@ -22,7 +33,7 @@ let lastTick = 0, watchdog = null;
 
 /* ---------------- api ---------------- */
 async function api(path, { method = 'GET', body, auth = true } = {}) {
-  const h = { 'Content-Type': 'application/json' };
+  const h = { 'Content-Type': 'application/json', 'X-Device-Id': DEVICE_ID };
   if (auth && token) h.Authorization = 'Bearer ' + token;
   let r;
   try {
@@ -33,7 +44,7 @@ async function api(path, { method = 'GET', body, auth = true } = {}) {
   let j = null;
   try { j = await r.json(); } catch {}
   if (!r.ok) {
-    if (r.status === 401) { signOut(); throw new Error('Session expired. Sign in again.'); }
+    if (r.status === 401) { signOut(); throw new Error((j && j.error) || 'Session expired. Sign in again.'); }
     throw new Error((j && j.error) || ('Request failed (' + r.status + ')'));
   }
   return j;
@@ -75,9 +86,9 @@ $('b-auth').onclick = async () => {
   $('b-auth').disabled = true;
   try {
     const body = registerMode
-      ? { phone, password, name: $('f-name').value.trim(),
+      ? { phone, password, deviceId: DEVICE_ID, name: $('f-name').value.trim(),
           city: $('f-city').value.trim(), pan: $('f-pan').value.trim(), gst: $('f-gst').value.trim() }
-      : { phone, password };
+      : { phone, password, deviceId: DEVICE_ID };
     const r = await api(registerMode ? '/api/register' : '/api/login', { method: 'POST', body, auth: false });
     token = r.token; localStorage.setItem('rdgold.token', token);
     me = r.user || null;
@@ -88,7 +99,11 @@ $('b-auth').onclick = async () => {
 };
 
 async function afterSignIn(msg) {
-  try { me = await api('/api/me'); } catch {}
+  try { me = await api('/api/me'); }
+  catch (e) {
+    // token no longer valid (e.g. the account was moved to another phone)
+    signOut(); note('authmsg', e.message); return;
+  }
   loadConfig();
   $('navAdmin').classList.toggle('hide', !(me && me.role === 'admin'));
   show('rates');
@@ -140,6 +155,8 @@ function badge(state) {
   b.className = 'badge' + (state === 'live' ? ' live' : state === 'stale' ? ' stale' : '');
   b.textContent = state;
 }
+const num = n => n == null ? '—' : Math.round(n).toLocaleString('en-IN');
+
 function paintRates(d) {
   snap = d;
   badge(d.stale ? 'stale' : (d.marketOpen === false ? 'closed' : 'live'));
@@ -153,13 +170,12 @@ function paintRates(d) {
     dirBuy[p.code] = dir;
     prevBuy[p.code] = p.buy;
     const arrow = dir === 'up' ? ' <i>▲</i>' : dir === 'dn' ? ' <i>▼</i>' : '';
-    const oz   = p.spotUsd ? '$' + p.spotUsd.toFixed(2) : '<span class="none">—</span>';
-    const gst  = p.buyWithGst ? fmt(p.buyWithGst) : '<span class="none">—</span>';
-    const cash = p.cash ? fmt(p.cash) : '<span class="none">—</span>';
+    const oz   = p.spotUsd ? p.spotUsd.toFixed(2) : '<span class="none">—</span>';
+    const gst  = p.buyWithGst ? num(p.buyWithGst) : '<span class="none">—</span>';
+    const cash = p.cash ? num(p.cash) : '<span class="none">—</span>';
     return `<tr class="r" data-row="${esc(p.code)}">
-      <td><span class="pname">${esc(p.name)}</span>
-          <span class="psub">per ${esc(p.unit)}</span></td>
-      <td class="main ${dir}">${fmt(p.buy)}${arrow}</td>
+      <td><span class="pname">${esc(p.name)}</span></td>
+      <td class="main ${dir}">${num(p.buy)}${arrow}</td>
       <td class="gst">${gst}</td>
       <td class="fx">${oz}</td>
       <td class="cash">${cash}</td>
@@ -169,8 +185,8 @@ function paintRates(d) {
   $('ratecard').innerHTML = rows
     ? `<table class="rtable">
          <thead><tr>
-           <th>Product</th><th>Without GST</th><th>With GST ${gstPct}%</th>
-           <th>Forex $/oz</th><th>Cash</th>
+           <th>Product</th><th>₹ ex-GST</th><th>₹ +${gstPct}% GST</th>
+           <th>$/oz</th><th>₹ cash</th>
          </tr></thead>
          <tbody>${rows}</tbody>
        </table>
@@ -351,6 +367,10 @@ async function loadAdmin() {
         <div class="row sm" style="margin-top:3px">
           <span class="muted">joined ${esc((u.created_at || '').slice(0, 16))}</span>
           <span class="muted">${u.last_login ? 'last in ' + esc(String(u.last_login).replace('T',' ').slice(0,16)) : 'never signed in'}${u.login_count ? ' · ' + u.login_count + 'x' : ''}</span></div>
+        <div class="row sm" style="margin-top:3px">
+          <span class="muted">${u.device_id ? 'locked to ' + esc(u.device_name || 'a phone') : 'no phone linked yet'}</span>
+          ${u.device_id ? `<button class="btn" style="width:auto;padding:4px 10px;font-size:12px" data-act="device" data-id="${u.id}">Reset phone</button>` : ''}
+        </div>
         <div class="btn2" style="margin-top:8px">
           <button class="btn" style="padding:7px;font-size:13px" data-act="active" data-id="${u.id}">Approve</button>
           <button class="btn" style="padding:7px;font-size:13px" data-act="blocked" data-id="${u.id}">Block</button>
@@ -403,7 +423,10 @@ async function loadAdmin() {
 
 async function adminUser(id, act) {
   try {
-    if (act === 'limit') {
+    if (act === 'device') {
+      if (!confirm('Unlink this client from their phone? They can then sign in on a new one.')) return;
+      await api('/api/admin/users/' + id, { method: 'PATCH', body: { device_reset: true } });
+    } else if (act === 'limit') {
       const v = prompt('Margin limit in rupees for this client:');
       if (v == null) return;
       await api('/api/admin/users/' + id, { method: 'PATCH', body: { margin_limit: Number(v) } });

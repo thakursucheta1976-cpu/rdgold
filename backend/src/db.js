@@ -149,6 +149,10 @@ if (!cols.includes('last_login'))  db.exec("ALTER TABLE users ADD COLUMN last_lo
 if (!cols.includes('login_count')) db.exec("ALTER TABLE users ADD COLUMN login_count INTEGER NOT NULL DEFAULT 0");
 if (!cols.includes('email'))       db.exec("ALTER TABLE users ADD COLUMN email TEXT");
 if (!cols.includes('address'))     db.exec("ALTER TABLE users ADD COLUMN address TEXT");
+// one account = one phone = one device. device_id is the handset the account is locked to.
+if (!cols.includes('device_id'))   db.exec("ALTER TABLE users ADD COLUMN device_id TEXT");
+if (!cols.includes('device_name')) db.exec("ALTER TABLE users ADD COLUMN device_name TEXT");
+if (!cols.includes('device_at'))   db.exec("ALTER TABLE users ADD COLUMN device_at TEXT");
 
 export default db;
 // Settings are read many times per second (every rate tick, for every product).

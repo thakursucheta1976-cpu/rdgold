@@ -1,134 +1,101 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RDgold</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Archivo:wght@400;500;600;700&display=swap">
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RDgold — live bullion rates</title>
+<meta name="description" content="Live gold and silver rates from your dealer. Watch the market, call to book.">
+<meta name="theme-color" content="#0c0d10">
+<link rel="icon" href="app/icon-192.png">
+<link rel="apple-touch-icon" href="app/icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=Archivo:wght@400;600;700&display=swap">
 <style>
-/* Layout: dark bullion-desk look; one gold accent, ticker strip, centered column */
 :root{
   --bg:#0c0d10; --panel:#15161c; --line:#262830;
   --gold:#d4af37; --gold-soft:#e8cc6a;
   --fg:#ece9e0; --mut:#8d9099;
-  --grn:#39c377; --red:#e05c4f;
   --disp:"Fraunces",Georgia,serif; --body:"Archivo",system-ui,sans-serif;
   color-scheme:dark;
 }
-body{background:var(--bg);color:var(--fg);font-family:var(--body);margin:0;padding-inline:16px}
-.wrap{max-width:960px;margin:0 auto}
+*{box-sizing:border-box}
+html,body{overflow-x:hidden}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);margin:0;padding:0 16px;
+  -webkit-text-size-adjust:100%}
+.wrap{max-width:760px;margin:0 auto}
 a{color:var(--gold)}
-/* ticker */
-.ticker{display:flex;gap:28px;justify-content:center;flex-wrap:wrap;border-bottom:1px solid var(--line);padding:10px 0;font-size:13px;color:var(--mut)}
-.ticker b{color:var(--fg);font-variant-numeric:tabular-nums}
-.ticker .up{color:var(--grn)} .ticker .dn{color:var(--red)}
-/* hero */
-header{text-align:center;padding:64px 0 48px}
-.mark{width:72px;height:72px;margin:0 auto 18px;border-radius:50%;
-  background:radial-gradient(circle at 32% 28%, #f2dd8e, var(--gold) 55%, #8a6d1c);
+
+header{text-align:center;padding:72px 0 52px}
+.mark{width:68px;height:68px;margin:0 auto 20px;border-radius:50%;
+  background:radial-gradient(circle at 32% 28%,#f2dd8e,var(--gold) 55%,#8a6d1c);
   display:flex;align-items:center;justify-content:center;
-  font-family:var(--disp);font-weight:700;font-size:26px;color:#15120a;box-shadow:0 8px 40px rgba(212,175,55,.25)}
-h1{font-family:var(--disp);font-weight:700;font-size:clamp(40px,8vw,64px);margin:0;letter-spacing:-.01em;text-wrap:balance}
+  font-family:var(--disp);font-weight:700;font-size:24px;color:#15120a}
+h1{font-family:var(--disp);font-weight:700;font-size:clamp(36px,9vw,56px);margin:0;letter-spacing:-.01em}
 h1 .rd{color:var(--gold)}
-.tag{color:var(--mut);font-size:17px;max-width:34em;margin:14px auto 0;line-height:1.6}
-.cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:30px}
-.btn{display:inline-flex;align-items:center;gap:9px;padding:14px 26px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none}
+.tag{color:var(--mut);font-size:16px;max-width:30em;margin:14px auto 0;line-height:1.65}
+.cta{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:28px}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:14px 26px;border-radius:10px;
+  font-weight:700;font-size:15px;text-decoration:none;min-width:170px}
 .btn-gold{background:linear-gradient(180deg,var(--gold-soft),var(--gold));color:#161206}
 .btn-ghost{border:1px solid var(--line);color:var(--fg)}
-.note{font-size:12.5px;color:var(--mut);margin-top:12px}
-.live{color:var(--grn);font-weight:600}
-/* sections */
-section{padding:44px 0;border-top:1px solid var(--line)}
-h2{font-family:var(--disp);font-weight:700;font-size:28px;margin:0 0 22px;text-align:center;text-wrap:balance}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;min-width:0}
-.card h3{margin:0 0 6px;font-size:16px;display:flex;align-items:center;gap:8px}
-.card h3 .dot{width:8px;height:8px;border-radius:50%;background:var(--gold);flex:none}
-.card p{margin:0;color:var(--mut);font-size:14px;line-height:1.6}
-/* steps */
-.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;counter-reset:s}
-.step{border:1px solid var(--line);border-radius:14px;padding:18px;min-width:0}
-.step::before{counter-increment:s;content:counter(s);display:inline-flex;width:26px;height:26px;border-radius:50%;
-  background:var(--gold);color:#161206;font-weight:700;font-size:14px;align-items:center;justify-content:center;margin-bottom:10px}
-.step b{display:block;margin-bottom:4px}
-.step span{color:var(--mut);font-size:13.5px;line-height:1.55}
-/* download */
-#download .card{max-width:520px;margin:0 auto;text-align:center}
-.chips{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
-.chip{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:5px 12px;color:var(--mut)}
-footer{border-top:1px solid var(--line);padding:28px 0 36px;text-align:center;color:var(--mut);font-size:13px;line-height:1.8}
-@media (prefers-reduced-motion:no-preference){
-  .mark{animation:glow 3.5s ease-in-out infinite alternate}
-  @keyframes glow{from{box-shadow:0 8px 32px rgba(212,175,55,.18)}to{box-shadow:0 10px 52px rgba(212,175,55,.38)}}
-}
-</style>
+.note{font-size:12.5px;color:var(--mut);margin-top:14px}
 
+section{padding:40px 0;border-top:1px solid var(--line)}
+h2{font-family:var(--disp);font-weight:700;font-size:24px;margin:0 0 18px;text-align:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;min-width:0}
+.card h3{margin:0 0 6px;font-size:15.5px}
+.card p{margin:0;color:var(--mut);font-size:14px;line-height:1.6}
+ol{margin:0;padding-left:20px;color:var(--mut);font-size:15px;line-height:1.9}
+ol b{color:var(--fg)}
+.how{max-width:34em;margin:0 auto}
+footer{border-top:1px solid var(--line);padding:26px 0 40px;text-align:center;
+  color:var(--mut);font-size:13px;line-height:1.8}
+</style>
 </head><body>
 <div class="wrap">
+
 <header>
   <div class="mark">RD</div>
   <h1><span class="rd">RD</span>gold</h1>
-  <p class="tag">Live gold and silver rates on your phone, straight from your dealer.
-    Watch the market, then call to book — the rate is fixed with us on the call.</p>
-  <div class="cta-row">
+  <p class="tag">Live gold and silver rates from your dealer. Watch the market,
+    then call to book — the rate is fixed with us on the call.</p>
+  <div class="cta">
     <a class="btn btn-gold" href="app/">Open the app</a>
-    <a class="btn" href="#install">Install on your phone</a>
-    <a class="btn btn-ghost" href="#how">How it works</a>
+    <a class="btn btn-ghost" href="#install">Add to home screen</a>
   </div>
-  <p class="note">Works on iPhone and Android · no app store · no ads, no trackers</p>
+  <p class="note">Works on iPhone, Android and desktop · nothing to download</p>
 </header>
 
 <section>
-  <h2>Built for serious bullion buyers</h2>
+  <h2>What you get</h2>
   <div class="grid">
-    <div class="card"><h3><span class="dot"></span>Book on a call</h3><p>See the live rate, pick your quantity, then tap to call or WhatsApp us. The rate is fixed with you on the call — nothing is executed behind your back.</p></div>
-    <div class="card"><h3><span class="dot"></span>Rate alerts</h3><p>Set the level you want. We ping you the moment gold or silver touches it, so you can call at the right time instead of watching all day.</p></div>
-    <div class="card"><h3><span class="dot"></span>Live every second</h3><p>International spot, USD/INR and your landed rupee rate, refreshed every second. If the feed ever lags, the app says so instead of showing you an old number.</p></div>
-    <div class="card"><h3><span class="dot"></span>Rate alerts</h3><p>Get pinged when gold crosses your number — above or below, any product.</p></div>
-    <div class="card"><h3><span class="dot"></span>Position &amp; history</h3><p>Every trade, your net position and your margin limit in one clean ledger.</p></div>
-    <div class="card"><h3><span class="dot"></span>Direct settlement</h3><p>RTGS/NEFT/IMPS details inside the app. Transfer, share your UTR on WhatsApp, collect your metal.</p></div>
+    <div class="card"><h3>Live rates</h3><p>Gold and silver, with and without GST, refreshed every second. If the feed lags, the app says so instead of showing an old number.</p></div>
+    <div class="card"><h3>Book on a call</h3><p>Pick the quantity, tap to call or WhatsApp. The rate is fixed with you on the phone — nothing executes on its own.</p></div>
+    <div class="card"><h3>Rate alerts</h3><p>Set your level. We ping you the moment gold or silver touches it.</p></div>
   </div>
 </section>
 
-<section id="how">
-  <h2>From download to delivery</h2>
-  <div class="steps">
-    <div class="step"><b>Install &amp; register</b><span>Add RDgold to your home screen, then sign up with your mobile number and PAN/GSTIN.</span></div>
-    <div class="step"><b>Get approved</b><span>We verify your KYC and switch your account on — usually same day.</span></div>
-    <div class="step"><b>Call to book</b><span>Watch the live rate, then tap to call. We fix the rate with you on the phone.</span></div>
-    <div class="step"><b>Pay &amp; collect</b><span>Transfer via RTGS/NEFT, send the UTR, and track your order to delivery.</span></div>
-  </div>
+<section class="how">
+  <h2>How it works</h2>
+  <ol>
+    <li><b>Open the app</b> and register with your mobile number.</li>
+    <li><b>We approve you</b> after a quick KYC check, usually the same day.</li>
+    <li><b>Watch the rate, then call</b> to fix the price and place your order.</li>
+    <li><b>Pay by RTGS/NEFT</b>, send the UTR, collect your metal.</li>
+  </ol>
 </section>
 
-<section id="download">
-  <h2>Get the app</h2>
-  <div class="card">
-    <p style="color:var(--mut);margin:0 0 16px">Direct APK download — install in under a minute.</p>
-    <a class="btn btn-gold" href="app/">Open RDgold</a>
-    <div class="chips">
-      <span class="chip">Android 8.0+</span><span class="chip">~20 MB</span><span class="chip">v1.0.0</span><span class="chip">Free</span>
-    </div>
-    <p style="color:var(--mut);font-size:12.5px;margin:16px 0 0">Enable “Install unknown apps” for your browser when prompted. Play Store listing coming soon.</p>
-  </div>
-</section>
-
-
-<section id="install" style="max-width:720px;margin:72px auto 0;padding:0 20px">
-  <h2 style="font-family:var(--disp);font-size:26px;margin-bottom:14px">Put RDgold on your home screen</h2>
-  <p style="color:var(--mut);line-height:1.7;font-size:15px">
-    One app for both phones. It installs from this page — full screen, its own icon,
-    live rates inside. No App Store, no Play Store, nothing to update.
-  </p>
-  <p style="color:var(--mut);line-height:1.9;font-size:15px;margin-top:14px">
-    <b style="color:var(--fg)">iPhone</b> — open this page in Safari, tap Share, then Add to Home Screen.<br>
-    <b style="color:var(--fg)">Android</b> — open this page in Chrome, tap the menu, then Install app.
-  </p>
-  <p style="margin-top:18px"><a class="btn btn-gold" href="app/">Open RDgold</a></p>
+<section id="install" class="how">
+  <h2>Add to home screen</h2>
+  <ol>
+    <li><b>iPhone</b> — open this page in Safari, tap Share, then Add to Home Screen.</li>
+    <li><b>Android</b> — open this page in Chrome, tap the menu, then Install app.</li>
+    <li><b>Desktop</b> — just open the app in your browser.</li>
+  </ol>
+  <p style="text-align:center;margin-top:22px"><a class="btn btn-gold" href="app/">Open the app</a></p>
 </section>
 
 <footer>
-  RDgold · bullion rates &amp; booking<br>
-  Rates shown in the app are indicative, ex-GST; the final rate is agreed on the call. All sales are firm contracts with physical delivery.<br>
-  WhatsApp: +91 00000 00000 · Mumbai, India
+  RDgold · bullion rates &amp; booking · Mumbai, India<br>
+  Rates in the app are indicative; the final rate is agreed on the call.
 </footer>
+
 </div>
-
-
-
 </body></html>

@@ -22,13 +22,14 @@ ok('rates served', r.products?.length === 3 && r.products[0].buy > 0, `gold999 b
 ok('rates not stale', r.stale === false);
 
 // register + login
-let reg = await j(await post('/register', {phone:'9999990001', name:'Test Trader', password:'secret12'}));
+const DEV = 'device-aaaaaaaa1';
+let reg = await j(await post('/register', {phone:'9999990001', name:'Test Trader', password:'secret12', deviceId:DEV}));
 ok('register', !!reg.token);
-let dup = await post('/register', {phone:'9999990001', name:'X', password:'secret12'});
+let dup = await post('/register', {phone:'9999990001', name:'X', password:'secret12', deviceId:DEV});
 ok('duplicate phone rejected', dup.status === 409);
-let badlogin = await post('/login', {phone:'9999990001', password:'wrong'});
+let badlogin = await post('/login', {phone:'9999990001', password:'wrong', deviceId:DEV});
 ok('bad login rejected', badlogin.status === 401);
-let login = await j(await post('/login', {phone:'9999990001', password:'secret12'}));
+let login = await j(await post('/login', {phone:'9999990001', password:'secret12', deviceId:DEV}));
 const tok = login.token;
 
 // pending user can't trade
@@ -118,8 +119,9 @@ let xssReg = await post('/register', {phone:'9999990002', name:'<img src=x onerr
 ok('XSS name rejected at register', xssReg.status === 400);
 
 // IDOR: user B cannot fetch A's order via idempotency key
-await post('/register', {phone:'9999990003', name:'Other Trader', password:'secret12'});
-let other = await j(await post('/login', {phone:'9999990003', password:'secret12'}));
+const DEV3 = 'device-cccccccc3';
+await post('/register', {phone:'9999990003', name:'Other Trader', password:'secret12', deviceId:DEV3});
+let other = await j(await post('/login', {phone:'9999990003', password:'secret12', deviceId:DEV3}));
 let users2 = await j(await get('/admin/users', adm.token));
 const uid2 = users2.find(u=>u.phone==='9999990003').id;
 await patch('/admin/users/'+uid2, {status:'active', margin_limit: 100000000}, adm.token);
@@ -297,13 +299,38 @@ let shortPw = await patch('/me', { currentPassword:'secret12', newPassword:'123'
 ok('short password rejected', shortPw.status === 400);
 let okPw = await patch('/me', { currentPassword:'secret12', newPassword:'newsecret1' }, tok);
 ok('password changed', okPw.status === 200);
-let reLogin = await post('/login', { phone:'9999990001', password:'newsecret1' });
+let reLogin = await post('/login', { phone:'9999990001', password:'newsecret1', deviceId:DEV });
 ok('login works with the new password', reLogin.status === 200);
-let oldLogin = await post('/login', { phone:'9999990001', password:'secret12' });
+let oldLogin = await post('/login', { phone:'9999990001', password:'secret12', deviceId:DEV });
 ok('old password no longer works', oldLogin.status === 401);
 
 let noAuth = await fetch(B+'/me', { method:'PATCH', headers:{'Content-Type':'application/json'}, body:'{"name":"hacker"}' });
 ok('profile edit needs a token', noAuth.status === 401);
+
+// ---- one account, one phone ----
+let noDev = await post('/login', { phone:'9999990001', password:'newsecret1' });
+ok('login without a device id refused', noDev.status === 400);
+
+let otherDev = await post('/login', { phone:'9999990001', password:'newsecret1', deviceId:'device-bbbbbbbb2' });
+ok('second phone refused', otherDev.status === 403);
+
+let sameDev = await j(await post('/login', { phone:'9999990001', password:'newsecret1', deviceId:DEV }));
+ok('same phone still works', !!sameDev.token);
+
+let admNoDev = await post('/login', { phone:'admin', password:'admin1234' });
+ok('admin is exempt from the device lock', admNoDev.status === 200);
+
+let listed = await j(await get('/admin/users', adm.token));
+ok('admin sees the linked phone', !!listed.find(u => u.phone === '9999990001').device_id);
+
+await patch('/admin/users/'+uid, { device_reset: true }, adm.token);
+let afterReset = await j(await post('/login', { phone:'9999990001', password:'newsecret1', deviceId:'device-bbbbbbbb2' }));
+ok('after a reset the new phone can sign in', !!afterReset.token);
+
+let oldTok = await get('/me', sameDev.token);
+ok('the old phone is signed out', oldTok.status === 401);
+let newTok = await get('/me', afterReset.token);
+ok('the new phone works', newTok.status === 200);
 
 console.log(fails === 0 ? '\nALL TESTS PASSED' : `\n${fails} FAILURES`);
 process.exit(fails === 0 ? 0 : 1);

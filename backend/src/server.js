@@ -50,7 +50,7 @@ app.use((req, res, next) => {
   }
 
   res.set('Vary', 'Origin');
-  res.set('Access-Control-Allow-Headers', 'Authorization,Content-Type');
+  res.set('Access-Control-Allow-Headers', 'Authorization,Content-Type,X-Device-Id');
   res.set('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS');
   res.set('Access-Control-Max-Age', '600');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
@@ -61,7 +61,20 @@ app.use((req, res, next) => {
 app.get('/healthz', (req, res) => res.json({ ok: true, stale: rateState.stale, ts: Date.now() }));
 
 // ---------- auth ----------
-function sign(u) { return jwt.sign({ id: u.id, role: u.role }, JWT_SECRET, { expiresIn: '30d' }); }
+function sign(u, did) { return jwt.sign({ id: u.id, role: u.role, did: did || u.device_id || null },
+                                        JWT_SECRET, { expiresIn: '30d' }); }
+
+// one account is locked to one handset. admins are exempt (they use the desk machine too).
+const DEVICE_MSG = 'This account is already signed in on another phone. Ask us to reset it.';
+function deviceOf(req) {
+  const d = String((req.body && req.body.deviceId) || req.headers['x-device-id'] || '').trim();
+  return /^[A-Za-z0-9_-]{8,64}$/.test(d) ? d : null;
+}
+function deviceLabel(req) {
+  const a = String(req.headers['user-agent'] || '');
+  const m = a.match(/\((?:Linux; )?([^);]+)/);
+  return (m ? m[1] : a).slice(0, 60) || null;
+}
 function auth(role = null) {
   return (req, res, next) => {
     const h = req.headers.authorization || '';
@@ -72,6 +85,8 @@ function auth(role = null) {
       const u = db.prepare('SELECT * FROM users WHERE id=?').get(p.id);
       if (!u || u.status === 'blocked') return res.status(403).json({ error: 'blocked' });
       if (role && u.role !== role) return res.status(403).json({ error: 'forbidden' });
+      if (u.role !== 'admin' && u.device_id && p.did !== u.device_id)
+        return res.status(401).json({ error: DEVICE_MSG });
       req.user = u;
       next();
     } catch { return res.status(401).json({ error: 'bad token' }); }
@@ -91,8 +106,11 @@ app.post('/api/register', (req, res) => {
     const hash = bcrypt.hashSync(password, 10);
     const r = db.prepare(`INSERT INTO users(phone,name,password_hash,kyc_pan,kyc_gst,kyc_city) VALUES (?,?,?,?,?,?)`)
       .run(phone.trim(), name.trim(), hash, pan || null, gst || null, city || null);
+    const did = deviceOf(req);
+    if (did) db.prepare("UPDATE users SET device_id=?, device_name=?, device_at=datetime('now') WHERE id=?")
+               .run(did, deviceLabel(req), r.lastInsertRowid);
     const u = db.prepare('SELECT * FROM users WHERE id=?').get(r.lastInsertRowid);
-    res.json({ token: sign(u), user: pub(u), note: 'Account pending admin approval before trading.' });
+    res.json({ token: sign(u, did), user: pub(u), note: 'Account pending admin approval before trading.' });
   } catch (e) {
     if (String(e).includes('UNIQUE')) return res.status(409).json({ error: 'phone already registered' });
     res.status(500).json({ error: 'register failed' });
@@ -117,18 +135,32 @@ app.post('/api/login', (req, res) => {
     try { recordLogin.run(u.id, ip, agent, 0); } catch {}
     return res.status(403).json({ error: 'account blocked' });
   }
+  const did = deviceOf(req);
+  if (u.role !== 'admin') {
+    if (!did) return res.status(400).json({ error: 'app out of date — reopen the app and try again' });
+    if (u.device_id && u.device_id !== did) {
+      try { recordLogin.run(u.id, ip, agent, 0); } catch {}
+      return res.status(403).json({ error: DEVICE_MSG });
+    }
+    if (!u.device_id) {
+      db.prepare("UPDATE users SET device_id=?, device_name=?, device_at=datetime('now') WHERE id=?")
+        .run(did, deviceLabel(req), u.id);
+      u.device_id = did;
+    }
+  }
   try {
     recordLogin.run(u.id, ip, agent, 1);
     db.prepare("UPDATE users SET last_login=datetime('now'), login_count=login_count+1 WHERE id=?").run(u.id);
   } catch {}
-  res.json({ token: sign(u), user: pub(u) });
+  res.json({ token: sign(u, u.device_id), user: pub(u) });
 });
 
 function pub(u) {
   return { id: u.id, phone: u.phone, name: u.name, role: u.role, status: u.status,
            marginLimit: u.margin_limit, city: u.kyc_city,
            pan: u.kyc_pan, gst: u.kyc_gst, email: u.email, address: u.address,
-           createdAt: u.created_at, lastLogin: u.last_login };
+           createdAt: u.created_at, lastLogin: u.last_login,
+           device: u.device_id ? { name: u.device_name || 'phone', since: u.device_at } : null };
 }
 
 // ---------- rates ----------
@@ -328,7 +360,8 @@ app.delete('/api/alerts/:id', auth(), (req, res) => {
 // ---------- admin ----------
 app.get('/api/admin/users', auth('admin'), (req, res) =>
   res.json(db.prepare(`SELECT id,phone,name,role,status,margin_limit,premium_gold,premium_silver,
-      kyc_pan,kyc_city,created_at,last_login,login_count FROM users ORDER BY id DESC`).all()));
+      kyc_pan,kyc_city,created_at,last_login,login_count,
+      device_id,device_name,device_at FROM users ORDER BY id DESC`).all()));
 
 // who signed in, when, from where
 app.get('/api/admin/logins', auth('admin'), (req, res) => {
@@ -349,6 +382,10 @@ app.patch('/api/admin/users/:id', auth('admin'), (req, res) => {
       if (!Number.isFinite(v)) return res.status(400).json({ error: `bad ${k}` });
     }
     sets.push(`${k}=?`); vals.push(v);
+  }
+  // "reset device" lets a client sign in on a new handset — the old one is logged out
+  if (req.body.device_reset) {
+    sets.push('device_id=?', 'device_name=?', 'device_at=?'); vals.push(null, null, null);
   }
   if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
   vals.push(req.params.id);
@@ -417,7 +454,12 @@ wss.on('connection', (ws, req) => {
   try {
     const url = new URL(req.url, 'http://x');
     const tok = url.searchParams.get('token');
-    if (tok) ws.userId = jwt.verify(tok, JWT_SECRET).id;
+    if (tok) {
+      const p = jwt.verify(tok, JWT_SECRET);
+      const u = db.prepare('SELECT id,role,device_id FROM users WHERE id=?').get(p.id);
+      // same device rule as the HTTP side: a token from another handset gets public rates only
+      if (u && (u.role === 'admin' || !u.device_id || u.device_id === p.did)) ws.userId = u.id;
+    }
   } catch {}
   ws.send(JSON.stringify({ type: 'rates', data: snapForWs(ws) }));
 });
