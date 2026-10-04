@@ -422,6 +422,7 @@ async function loadAdmin() {
 
     const sv = settings || {};
     $('adm-cg').value   = (sv.cash_gold_rate && Number(sv.cash_gold_rate) > 0) ? sv.cash_gold_rate : '';
+    $('adm-cg995').value = (sv.cash_gold_995_rate && Number(sv.cash_gold_995_rate) > 0) ? sv.cash_gold_995_rate : '';
     $('adm-cs').value   = (sv.cash_silver_rate && Number(sv.cash_silver_rate) > 0) ? sv.cash_silver_rate : '';
     $('adm-phone').value = sv.dealer_phone || '';
     $('adm-sg').value   = sv.global_spread_gold ?? '';
@@ -480,11 +481,15 @@ $('adm-cash-save').onclick = async () => {
   $('adm-cash-save').disabled = true;
   try {
     // blank means "stop showing a cash rate", so send 0 rather than skipping it
-    await api('/api/admin/settings', { method: 'PATCH', body: {
-      cash_gold_rate:   $('adm-cg').value === '' ? 0 : $('adm-cg').value,
-      cash_silver_rate: $('adm-cs').value === '' ? 0 : $('adm-cs').value } });
-    note('admmsg', 'Cash rates saved.', 'ok');
-  } catch (e) { note('admmsg', e.message); }
+    const r = await api('/api/admin/settings', { method: 'PATCH', body: {
+      cash_gold_rate:     $('adm-cg').value    === '' ? 0 : $('adm-cg').value,
+      cash_gold_995_rate: $('adm-cg995').value === '' ? 0 : $('adm-cg995').value,
+      cash_silver_rate:   $('adm-cs').value    === '' ? 0 : $('adm-cs').value } });
+    // show what the database really kept, not what we hoped it kept
+    const s = (r && r.saved) || {};
+    const show = v => (v && Number(v) > 0) ? fmt(Number(v)) : 'off';
+    note('admmsg', `Saved. Gold 999 ${show(s.cash_gold_rate)} · 995 ${show(s.cash_gold_995_rate)} · silver ${show(s.cash_silver_rate)}`, 'ok');
+  } catch (e) { note('admmsg', 'Not saved — ' + e.message); }
   finally { $('adm-cash-save').disabled = false; }
 };
 

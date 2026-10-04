@@ -167,11 +167,16 @@ export function snapshot(user = null) {
                spotUsd: p.metal === 'gold' ? state.xauusd : state.xagusd,
                // the dealer's own cash rate, typed in by the admin. 0 means not published.
                cash: (() => {
+                 const per = p.metal === 'gold' ? p.unit_grams / 10 : p.unit_grams / 1000;
+                 // 995 gold can have its own typed rate; if the admin leaves it blank
+                 // it is scaled down from the 999 rate.
+                 if (p.metal === 'gold' && Math.abs(p.purity - 0.995) < 0.0005) {
+                   const own = parseFloat(getSetting('cash_gold_995_rate') || '0');
+                   if (own > 0) return Math.round(own * per);
+                 }
                  const v = parseFloat(getSetting(
                    p.metal === 'gold' ? 'cash_gold_rate' : 'cash_silver_rate') || '0');
                  if (!(v > 0)) return null;
-                 // the admin types one rate for 999 purity; lower purities scale from it
-                 const per = p.metal === 'gold' ? p.unit_grams / 10 : p.unit_grams / 1000;
                  return Math.round(v * per * (p.purity / 0.999));
                })() };
     })

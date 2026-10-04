@@ -209,8 +209,9 @@ nav button.on{color:var(--gold-soft)}
     <div class="card">
       <h2>Cash rate (you type this)</h2>
       <p class="sm muted" style="margin:0 0 10px">Not fetched live. Leave blank to hide the cash column.</p>
-      <label>Cash gold rate (₹ per 10g, 999)</label><input id="adm-cg" inputmode="decimal" placeholder="e.g. 118900">
-      <label>Cash silver rate (₹ per kg)</label><input id="adm-cs" inputmode="decimal" placeholder="e.g. 148500">
+      <label>Cash gold 999 (₹ per 10g)</label><input id="adm-cg" inputmode="decimal" placeholder="e.g. 118900">
+      <label>Cash gold 995 (₹ per 10g) — blank = worked out from 999</label><input id="adm-cg995" inputmode="decimal" placeholder="e.g. 118300">
+      <label>Cash silver (₹ per kg)</label><input id="adm-cs" inputmode="decimal" placeholder="e.g. 148500">
       <div style="height:12px"></div>
       <button class="btn gold" id="adm-cash-save">Save cash rates</button>
     </div>

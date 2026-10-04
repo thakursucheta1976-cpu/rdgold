@@ -124,6 +124,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_idem ON orders(user_id, idempotency
 const set = db.prepare('INSERT OR IGNORE INTO settings(key,value) VALUES (?,?)');
 set.run('duty_pct', '6');            // import duty
 set.run('cash_gold_rate', '0');      // dealer's own cash rate, 0 = not published
+set.run('cash_gold_995_rate', '0'); // optional: own rate for 995, else scaled from 999
 set.run('cash_silver_rate', '0');
 set.run('gst_pct', '3');
 set.run('global_spread_gold', '0');  // INR per 10g adjustment to track MCX
@@ -141,7 +142,12 @@ seedProducts.run('SILVER999', 'Silver 999 (1kg)', 'silver', 0.999, '1kg', 1000, 
 
 // Orders are booked on the phone now, so there is no kill-switch to flip:
 // the market is always open as far as the app is concerned.
-db.exec("UPDATE settings SET value='true' WHERE key='market_open'");
+try {
+  db.prepare("INSERT INTO settings(key,value) VALUES('market_open','true') ON CONFLICT(key) DO UPDATE SET value='true'").run();
+  const mo = db.prepare("SELECT value FROM settings WHERE key='market_open'").get();
+  if (!mo || mo.value !== 'true') console.error('[db] WARNING: market_open is still', mo && mo.value);
+  else console.log('[db] market_open = true');
+} catch (e) { console.error('[db] could not force market_open:', e.message); }
 
 // --- migrations: columns added after the first release ---
 const cols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
@@ -173,6 +179,23 @@ export function getSetting(key) {
 }
 
 export function setSetting(key, value) {
-  db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, String(value));
-  if (_settings) _settings[key] = String(value);
+  const want = String(value);
+  db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, want);
+  // A remote database can accept a write and still not keep it. Read it straight
+  // back (not from the cache) so a silent failure becomes a visible error instead
+  // of a value that looks saved and disappears a few seconds later.
+  const row = db.prepare('SELECT value FROM settings WHERE key=?').get(key);
+  if (!row || String(row.value) !== want) {
+    _settings = null;
+    throw new Error(`the database did not keep ${key} (wanted "${want}", it has "${row ? row.value : 'nothing'}")`);
+  }
+  if (_settings) _settings[key] = want;
+  return want;
 }
+
+// what the database actually holds right now, cache bypassed
+export function getSettingFresh(key) {
+  const row = db.prepare('SELECT value FROM settings WHERE key=?').get(key);
+  return row ? row.value : null;
+}
+export function clearSettingsCache() { _settings = null; }

@@ -353,5 +353,36 @@ await patch('/admin/orders/'+bk.id, { status:'delivered' }, adm.token);
 let after = await j(await get('/orders', ctok));
 ok('status update reaches the client', after.find(o => o.id === bk.id).status === 'delivered');
 
+// ---- cash rates: 999, 995 and silver, and proof they were really stored ----
+let cashSave = await j(await patch('/admin/settings',
+  { cash_gold_rate: 118900, cash_gold_995_rate: 0, cash_silver_rate: 148500 }, adm.token));
+ok('settings reply says what was stored', cashSave.saved.cash_gold_rate === '118900');
+
+let withCash = await j(await get('/rates'));
+const x999 = withCash.products.find(p => p.code === 'GOLD999');
+const x995 = withCash.products.find(p => p.code === 'GOLD995');
+const cSil = withCash.products.find(p => p.code === 'SILVER999');
+ok('cash shows for gold 999', x999.cash === 118900);
+ok('cash for 995 is scaled from 999 when left blank', x995.cash === Math.round(118900 * (0.995 / 0.999)));
+ok('cash shows for silver', cSil.cash === 148500);
+
+await patch('/admin/settings', { cash_gold_995_rate: 118300 }, adm.token);
+let own = await j(await get('/rates'));
+ok('995 uses its own rate once typed', own.products.find(p => p.code === 'GOLD995').cash === 118300);
+
+await patch('/admin/settings', { cash_gold_995_rate: 0 }, adm.token);
+let back = await j(await get('/rates'));
+ok('clearing 995 falls back to the scaled rate',
+   back.products.find(p => p.code === 'GOLD995').cash === Math.round(118900 * (0.995 / 0.999)));
+
+await patch('/admin/settings', { cash_gold_rate: 0, cash_silver_rate: 0 }, adm.token);
+let noCash = await j(await get('/rates'));
+ok('cash can be switched off again', noCash.products.every(p => p.cash === null));
+
+let diag = await j(await get('/admin/diag', adm.token));
+ok('diagnostics prove the database keeps writes', diag.writesPersist === true, diag.database);
+let diagClient = await get('/admin/diag', ctok);
+ok('diagnostics are admin only', diagClient.status === 403);
+
 console.log(fails === 0 ? '\nALL TESTS PASSED' : `\n${fails} FAILURES`);
 process.exit(fails === 0 ? 0 : 1);

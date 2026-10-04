@@ -6,7 +6,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import db, { getSetting, setSetting } from './db.js';
+import db, { getSetting, setSetting, getSettingFresh, clearSettingsCache } from './db.js';
 import { startRatesEngine, snapshot, productRates, onTick, rateState } from './rates.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -441,7 +441,7 @@ app.get('/api/admin/settings', auth('admin'), (req, res) => {
   res.json(Object.fromEntries(rows.map(r => [r.key, r.value])));
 });
 const NUMERIC_SETTINGS = ['duty_pct', 'gst_pct', 'global_spread_gold', 'global_spread_silver',
-                          'cash_gold_rate', 'cash_silver_rate'];
+                          'cash_gold_rate', 'cash_gold_995_rate', 'cash_silver_rate'];
 const ALLOWED_SETTINGS = [...NUMERIC_SETTINGS, 'dealer_phone'];
 app.patch('/api/admin/settings', auth('admin'), (req, res) => {
   for (const [k, v] of Object.entries(req.body || {})) {
@@ -452,8 +452,31 @@ app.patch('/api/admin/settings', auth('admin'), (req, res) => {
       if (t && !/^\+?[0-9][0-9 -]{6,18}$/.test(t)) return res.status(400).json({ error: 'bad dealer_phone' });
     }
   }
-  for (const [k, v] of Object.entries(req.body || {})) setSetting(k, typeof v === 'object' ? JSON.stringify(v) : v);
-  res.json({ ok: true });
+  const saved = {};
+  try {
+    for (const [k, v] of Object.entries(req.body || {})) saved[k] = setSetting(k, v);
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+  // echo back what is really stored, so the app shows the truth and not a hope
+  const stored = {};
+  for (const k of Object.keys(saved)) stored[k] = getSettingFresh(k);
+  res.json({ ok: true, saved: stored });
+});
+
+// does this database actually keep what we write? (admin only)
+app.get('/api/admin/diag', auth('admin'), (req, res) => {
+  const key = '_diag_write_test', want = String(Date.now());
+  let write = 'ok', readBack = null, err = null;
+  try { setSetting(key, want); readBack = getSettingFresh(key); }
+  catch (e) { write = 'failed'; err = e.message; readBack = getSettingFresh(key); }
+  clearSettingsCache();
+  res.json({
+    database: process.env.TURSO_DATABASE_URL ? 'turso (remote)' : 'local file',
+    writesPersist: readBack === want, write, err,
+    settings: db.prepare('SELECT key, value FROM settings ORDER BY key').all(),
+    serverTimeUtc: new Date().toISOString()
+  });
 });
 
 // ---------- websocket live rates ----------
