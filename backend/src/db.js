@@ -148,10 +148,24 @@ if (!cols.includes('last_login'))  db.exec("ALTER TABLE users ADD COLUMN last_lo
 if (!cols.includes('login_count')) db.exec("ALTER TABLE users ADD COLUMN login_count INTEGER NOT NULL DEFAULT 0");
 
 export default db;
-export function getSetting(key) {
-  const r = db.prepare('SELECT value FROM settings WHERE key=?').get(key);
-  return r ? r.value : null;
+// Settings are read many times per second (every rate tick, for every product).
+// On a remote database each read is a network round trip, so keep them in memory
+// and refresh briefly; writes update the cache immediately.
+let _settings = null, _settingsAt = 0;
+const SETTINGS_TTL_MS = 5000;
+
+function loadSettings() {
+  const rows = db.prepare('SELECT key, value FROM settings').all();
+  _settings = Object.fromEntries(rows.map(r => [r.key, r.value]));
+  _settingsAt = Date.now();
 }
+
+export function getSetting(key) {
+  if (!_settings || Date.now() - _settingsAt > SETTINGS_TTL_MS) loadSettings();
+  return key in _settings ? _settings[key] : null;
+}
+
 export function setSetting(key, value) {
   db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, String(value));
+  if (_settings) _settings[key] = String(value);
 }

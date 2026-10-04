@@ -129,8 +129,18 @@ export function productRates(product, user = null) {
   return { buyRate, sellRate };
 }
 
+// The product list barely changes but is read on every tick; cache it briefly too.
+let _products = null, _productsAt = 0;
+function activeProducts() {
+  if (!_products || Date.now() - _productsAt > 5000) {
+    _products = db.prepare('SELECT * FROM products WHERE active=1').all();
+    _productsAt = Date.now();
+  }
+  return _products;
+}
+
 export function snapshot(user = null) {
-  const products = db.prepare('SELECT * FROM products WHERE active=1').all();
+  const products = activeProducts();
   return {
     ts: state.updatedAt,
     stale: state.stale || (Date.now() - state.updatedAt > 120_000),
