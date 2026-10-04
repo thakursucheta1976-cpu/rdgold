@@ -6,8 +6,8 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import db, { getSetting, setSetting, getSettingFresh, clearSettingsCache } from './db.js';
-import { startRatesEngine, snapshot, productRates, onTick, rateState } from './rates.js';
+import db, { getSetting, setSetting, getSettingFresh, clearSettingsCache, settingsReadCount } from './db.js';
+import { startRatesEngine, snapshot, productRates, onTick, rateState, calibrateEtf } from './rates.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || !process.env.ADMIN_PASSWORD)) {
@@ -65,7 +65,10 @@ app.get('/healthz', (req, res) => {
     keys = db.prepare('SELECT COUNT(DISTINCT key) c FROM settings').get().c;
   } catch {}
   res.json({ ok: true, stale: rateState.stale, ts: Date.now(),
-             settingsRows: rows, settingsKeys: keys, marketOpen: getSetting('market_open') === 'true' });
+             settingsRows: rows, settingsKeys: keys,
+             settingsReadable: settingsReadCount(),   // must match settingsRows
+             marketOpen: getSetting('market_open') === 'true',
+             marketOpenFresh: getSettingFresh('market_open') });
 });
 
 // ---------- auth ----------
@@ -449,15 +452,15 @@ app.get('/api/admin/settings', auth('admin'), (req, res) => {
   res.json(Object.fromEntries(rows.map(r => [r.key, r.value])));
 });
 const NUMERIC_SETTINGS = ['duty_pct', 'gst_pct', 'global_spread_gold', 'global_spread_silver',
-                          'margin_gold', 'margin_silver',
+                          'margin_gold', 'margin_silver', 'etf_factor_gold', 'etf_factor_silver',
                           'cash_gold_rate', 'cash_gold_995_rate', 'cash_silver_rate'];
 const ALLOWED_SETTINGS = [...NUMERIC_SETTINGS, 'dealer_phone', 'price_basis'];
 app.patch('/api/admin/settings', auth('admin'), (req, res) => {
   for (const [k, v] of Object.entries(req.body || {})) {
     if (!ALLOWED_SETTINGS.includes(k)) return res.status(400).json({ error: `unknown setting ${k}` });
     if (NUMERIC_SETTINGS.includes(k) && !Number.isFinite(Number(v))) return res.status(400).json({ error: `bad ${k}` });
-    if (k === 'price_basis' && !['mcx', 'spot'].includes(String(v)))
-      return res.status(400).json({ error: 'price_basis must be mcx or spot' });
+    if (k === 'price_basis' && !['auto', 'mcx', 'india', 'spot'].includes(String(v)))
+      return res.status(400).json({ error: 'price_basis must be auto, mcx, india or spot' });
     if (k === 'dealer_phone') {
       const t = String(v).trim();
       if (t && !/^\+?[0-9][0-9 -]{6,18}$/.test(t)) return res.status(400).json({ error: 'bad dealer_phone' });
@@ -473,6 +476,16 @@ app.patch('/api/admin/settings', auth('admin'), (req, res) => {
   const stored = {};
   for (const k of Object.keys(saved)) stored[k] = getSettingFresh(k);
   res.json({ ok: true, saved: stored });
+});
+
+// tie the Indian live anchor to the rate the dealer is actually quoting today
+app.post('/api/admin/calibrate', auth('admin'), (req, res) => {
+  const { metal, rate } = req.body || {};
+  if (!['gold', 'silver'].includes(metal)) return res.status(400).json({ error: 'metal must be gold or silver' });
+  const r = Number(rate);
+  if (!(r > 0)) return res.status(400).json({ error: 'enter the rate to match' });
+  try { res.json(calibrateEtf(metal, r)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 // does this database actually keep what we write? (admin only)

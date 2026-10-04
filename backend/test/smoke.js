@@ -439,5 +439,22 @@ let badBasis = await patch('/admin/settings', { price_basis: 'nonsense' }, adm.t
 ok('an unknown basis is rejected', badBasis.status === 400);
 await patch('/admin/settings', { price_basis: 'mcx' }, adm.token);
 
+// ---- the settings table must be readable, not just writable ----
+let hz2 = await (await fetch('http://localhost:8099/healthz')).json();
+ok('every settings row can be read back', hz2.settingsReadable === hz2.settingsRows,
+   `${hz2.settingsReadable} readable / ${hz2.settingsRows} rows`);
+ok('the cached and fresh reads agree', hz2.marketOpen === (hz2.marketOpenFresh === 'true'),
+   `cached ${hz2.marketOpen} fresh ${hz2.marketOpenFresh}`);
+
+// ---- the Indian live anchor (NSE ETF) and its one-time calibration ----
+let calNoQuote = await post('/admin/calibrate', { metal: 'gold', rate: 148140 }, adm.token);
+ok('calibration refuses without a live NSE quote', calNoQuote.status === 400);
+let calBadMetal = await post('/admin/calibrate', { metal: 'copper', rate: 1 }, adm.token);
+ok('calibration rejects an unknown metal', calBadMetal.status === 400);
+let calBadRate = await post('/admin/calibrate', { metal: 'gold', rate: 0 }, adm.token);
+ok('calibration rejects a zero rate', calBadRate.status === 400);
+let calClient = await post('/admin/calibrate', { metal: 'gold', rate: 148140 }, ctok);
+ok('only admins can calibrate', calClient.status === 403);
+
 console.log(fails === 0 ? '\nALL TESTS PASSED' : `\n${fails} FAILURES`);
 process.exit(fails === 0 ? 0 : 1);

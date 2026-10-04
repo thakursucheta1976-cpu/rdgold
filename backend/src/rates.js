@@ -132,9 +132,14 @@ async function pollFx() {
 export function __setMcxForTest(m) { state.mcx = m; state.mcxMovedAt = Date.now(); }
 
 export function priceBasis() {
-  const want = getSetting('price_basis') || 'mcx';   // 'mcx' | 'spot'
-  const fresh = state.mcx && (Date.now() - state.mcx.at) < 10 * 60_000;
-  if (want === 'mcx' && fresh && state.mcx.gold) return 'mcx';
+  // auto = the exchange when we can reach it, otherwise international spot.
+  // The NSE-ETF anchor is never picked on its own: an ETF carries its own
+  // premium and tracking error, so it is only used if the dealer asks for it.
+  const want = getSetting('price_basis') || 'auto';   // 'auto' | 'mcx' | 'india' | 'spot'
+  if (want === 'spot') return 'spot';
+  const mcxFresh = state.mcx && (Date.now() - state.mcx.at) < 10 * 60_000 && state.mcx.gold;
+  if (mcxFresh && (want === 'auto' || want === 'mcx')) return 'mcx';
+  if (want === 'india' && etfImplied('gold') != null) return 'india';
   return 'spot';
 }
 
@@ -143,7 +148,19 @@ export function baseInr(metal, purity, grams) {
   const spread = parseFloat(getSetting(spreadKey) || '0');
   const perUnitSpread = metal === 'gold' ? spread * (grams / 10) : spread * (grams / 1000);
 
-  if (priceBasis() === 'mcx') {
+  const basis = priceBasis();
+
+  if (basis === 'india') {
+    // already a rupee rate for 999 gold per 10g / 999 silver per kg
+    const implied = etfImplied(metal);
+    if (implied != null) {
+      const perUnit = metal === 'gold' ? grams / 10 : grams / 1000;
+      const ref = 0.999;
+      return implied * perUnit * (purity / ref) + perUnitSpread;
+    }
+  }
+
+  if (basis === 'mcx') {
     // MCX quotes gold per 10g and silver per kg, in rupees, already landed —
     // duty and the dollar are inside that number, so nothing is added here.
     const m = metal === 'gold' ? state.mcx.gold : state.mcx.silver;
@@ -218,6 +235,13 @@ export function snapshot(user = null) {
         movedMsAgo: state.mcxMovedAt ? Date.now() - state.mcxMovedAt : null
       } : null,
       mcxError: state.mcxError || null,
+      india: state.etf ? {
+        gold: state.etf.gold, silver: state.etf.silver,
+        impliedGold: etfImplied('gold'), impliedSilver: etfImplied('silver'),
+        movedMsAgo: state.etfMovedAt ? Date.now() - state.etfMovedAt : null,
+        calibrated: parseFloat(getSetting('etf_factor_gold') || '0') > 0
+      } : null,
+      indiaError: state.etfError || null,
       crossCheck: state.check || null,
       suspect: !!state.suspect
     },
@@ -266,21 +290,41 @@ let lastHist = 0;
 // rather than worked out from dollars.
 // ---------------------------------------------------------------------------
 async function fetchMcx() {
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-    'Referer': 'https://www.mcxindia.com/market-data/market-watch',
-    'Origin': 'https://www.mcxindia.com'
+  const BROWSER = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br'
   };
-  // the exchange's own market-watch feed, the same one its website reads
+  // the exchange's edge rejects a bare request, so do what a browser does:
+  // load the page first, keep its cookies, then call the feed the page calls.
+  let cookie = state.mcxCookie || '';
+  if (!cookie) {
+    const page = await fetch('https://www.mcxindia.com/market-data/market-watch', {
+      headers: { ...BROWSER, 'Accept': 'text/html,application/xhtml+xml' }
+    });
+    const set = page.headers.getSetCookie ? page.headers.getSetCookie() : [];
+    cookie = set.map(c => c.split(';')[0]).join('; ');
+    if (cookie) state.mcxCookie = cookie;
+    if (!page.ok && !cookie) throw new Error('page HTTP ' + page.status);
+  }
   const r = await fetch('https://www.mcxindia.com/backpage.aspx/GetMarketWatch', {
-    method: 'POST', headers: { ...headers, 'Content-Type': 'application/json; charset=UTF-8' }, body: '{}'
+    method: 'POST',
+    headers: {
+      ...BROWSER,
+      'Content-Type': 'application/json; charset=UTF-8',
+      'Accept': 'application/json, text/javascript, */*; q=0.01',
+      'X-Requested-With': 'XMLHttpRequest',
+      'Referer': 'https://www.mcxindia.com/market-data/market-watch',
+      'Origin': 'https://www.mcxindia.com',
+      ...(cookie ? { Cookie: cookie } : {})
+    },
+    body: '{}'
   });
-  if (!r.ok) throw new Error('HTTP ' + r.status);
+  if (!r.ok) { state.mcxCookie = null; throw new Error('HTTP ' + r.status); }
   const j = await r.json();
-  const rows = JSON.parse(j.d || '[]');
+  const rows = typeof j.d === 'string' ? JSON.parse(j.d) : (j.d || []);
   const pick = (symbol) => rows
     .filter(x => x.Symbol === symbol && x.InstrumentName === 'FUTCOM' && Number(x.LTP) > 0)
-    // nearest expiry that is actually trading
     .sort((a, b) => new Date(a.ExpiryDate) - new Date(b.ExpiryDate))[0];
   const gold = pick('GOLD') || pick('GOLDM');
   const silver = pick('SILVER') || pick('SILVERM');
@@ -308,6 +352,57 @@ async function pollMcx() {
     state.mcxError = e.message;
     console.error('[rates] mcx poll failed:', e.message);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Indian live anchor, for when MCX itself cannot be reached from a server.
+// GOLDBEES and SILVERBEES trade on the NSE in rupees and move with the Indian
+// market all session, so they carry duty, premium and the rupee inside them.
+// One number is missing: how much metal a unit represents. The dealer supplies
+// that once by telling us today's rate, and we keep the ratio.
+// ---------------------------------------------------------------------------
+async function pollEtf() {
+  if (state.simulate) return;
+  const grab = async (sym) => {
+    const j = await fetchJson(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1d`,
+      { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; RDgold/1.0)' } });
+    const m = j?.chart?.result?.[0]?.meta;
+    const v = parseFloat(m?.regularMarketPrice);
+    return v > 0 ? { price: v, at: m.regularMarketTime ? m.regularMarketTime * 1000 : Date.now() } : null;
+  };
+  try {
+    const [g, si] = await Promise.all([
+      grab('GOLDBEES.NS').catch(() => null),
+      grab('SILVERBEES.NS').catch(() => null)
+    ]);
+    if (!g && !si) throw new Error('no quotes');
+    if (g && state.etf?.gold?.price !== g.price) state.etfMovedAt = Date.now();
+    state.etf = { gold: g, silver: si, at: Date.now() };
+    state.etfError = null;
+  } catch (e) {
+    state.etfError = e.message;
+  }
+}
+
+// ₹ per 10g of 999 gold (or per kg of silver) implied by the ETF right now
+export function etfImplied(metal) {
+  const q = metal === 'gold' ? state.etf?.gold : state.etf?.silver;
+  const factor = parseFloat(getSetting(metal === 'gold' ? 'etf_factor_gold' : 'etf_factor_silver') || '0');
+  if (!q || !(factor > 0)) return null;
+  // the NSE closes at 3:30pm IST; a quote older than that is yesterday's
+  if (Date.now() - q.at > 24 * 3600_000) return null;
+  return q.price * factor;
+}
+
+// called when the dealer types today's real rate: remember the ratio
+export function calibrateEtf(metal, ratePerUnit) {
+  const q = metal === 'gold' ? state.etf?.gold : state.etf?.silver;
+  if (!q) throw new Error('no live NSE quote to calibrate against yet');
+  if (!(ratePerUnit > 0)) throw new Error('enter the rate you want to match');
+  const factor = ratePerUnit / q.price;
+  setSetting(metal === 'gold' ? 'etf_factor_gold' : 'etf_factor_silver', String(factor));
+  return { factor, quote: q.price, implied: q.price * factor };
 }
 
 // A second, independent source so a wrong price cannot pass unnoticed.
@@ -342,11 +437,12 @@ async function pollCrossCheck() {
 }
 
 export function startRatesEngine({ spotMs = 1000, fxMs = 60000, tickMs = 1000 } = {}) {
-  pollSpot(); pollFx(); pollCrossCheck(); pollMcx();
+  pollSpot(); pollFx(); pollCrossCheck(); pollMcx(); pollEtf();
   setInterval(pollSpot, spotMs);
   setInterval(pollFx, fxMs);
   setInterval(pollCrossCheck, 60_000);
   setInterval(pollMcx, 5_000);          // the exchange moves all session; keep up with it
+  setInterval(pollEtf, 5_000);
   setInterval(() => {
     if (state.xauusd == null) return;
     for (const fn of listeners) { try { fn(); } catch {} }

@@ -441,6 +441,7 @@ async function loadAdmin() {
     $('adm-cg995').value = (sv.cash_gold_995_rate && Number(sv.cash_gold_995_rate) > 0) ? sv.cash_gold_995_rate : '';
     $('adm-cs').value   = (sv.cash_silver_rate && Number(sv.cash_silver_rate) > 0) ? sv.cash_silver_rate : '';
     $('adm-phone').value = sv.dealer_phone || '';
+    showBasis();
     $('adm-sg').value   = sv.global_spread_gold ?? '';
     $('adm-mg').value   = sv.margin_gold ?? '';
     $('adm-ms').value   = sv.margin_silver ?? '';
@@ -494,6 +495,21 @@ $('bk-save').onclick = async () => {
   } catch (e) { note('admmsg', e.message); }
   finally { $('bk-save').disabled = false; }
 };
+
+// plain-English line about where today's prices are coming from
+function showBasis() {
+  const s = (snap && snap.sources) || {};
+  const el = $('adm-basis');
+  if (!el) return;
+  if (s.basis === 'mcx' && s.mcx) {
+    el.innerHTML = `<b>MCX live</b> — gold ${fmt(s.mcx.gold && s.mcx.gold.price)}, silver ${fmt(s.mcx.silver && s.mcx.silver.price)}.`;
+  } else if (s.basis === 'india' && s.india) {
+    el.innerHTML = `<b>Indian market live (NSE)</b> — matching ${fmt(s.india.impliedGold)} per 10g.`;
+  } else {
+    const why = s.mcxError ? `MCX unreachable (${esc(s.mcxError)})` : 'MCX unreachable';
+    el.innerHTML = `<b>International spot</b> — ${why}. Set your carry &amp; premium below to match your board.`;
+  }
+}
 
 $('adm-cash-save').onclick = async () => {
   $('adm-cash-save').disabled = true;

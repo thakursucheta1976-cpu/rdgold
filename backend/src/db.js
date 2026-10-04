@@ -132,7 +132,9 @@ set.run('global_spread_silver', '0');
 set.run('margin_gold', '0');     // dealer's own profit, INR per 10g (buy above / sell below)
 set.run('margin_silver', '0');   // same, INR per kg
 set.run('market_open', 'true');
-set.run('price_basis', 'mcx');   // mcx = official Indian exchange, spot = international
+set.run('price_basis', 'auto');  // auto | mcx | india (NSE anchor) | spot
+set.run('etf_factor_gold', '0');    // set by calibrating to today's real rate
+set.run('etf_factor_silver', '0');
 set.run('dealer_phone', '');         // number clients call / WhatsApp to book
 
 const seedProducts = db.prepare(`INSERT OR IGNORE INTO products
@@ -190,9 +192,26 @@ export default db;
 let _settings = null, _settingsAt = 0;
 const SETTINGS_TTL_MS = 5000;
 
+// Reading the settings table has to survive whatever shape the driver hands
+// back. On the remote database the rows did not come through as plain
+// {key, value} objects, so every setting silently fell back to its default:
+// the cash rate vanished, the market looked shut, nothing the admin typed stuck.
+function readSettingRows(sql, args = []) {
+  const rows = db.prepare(sql).all(...args);
+  const out = [];
+  for (const r of rows) {
+    let k, v;
+    if (Array.isArray(r)) { k = r[0]; v = r[1]; }
+    else { k = r.k ?? r.key ?? r.KEY ?? r.Key; v = r.v ?? r.value ?? r.VALUE ?? r.Value; }
+    if (k != null) out.push([String(k), v == null ? null : String(v)]);
+  }
+  return out;
+}
+
 function loadSettings() {
-  const rows = db.prepare('SELECT key, value FROM settings').all();
-  _settings = Object.fromEntries(rows.map(r => [r.key, r.value]));
+  const pairs = readSettingRows('SELECT key AS k, value AS v FROM settings');
+  if (!pairs.length) console.error('[db] WARNING: settings table read came back empty or unreadable');
+  _settings = Object.fromEntries(pairs);
   _settingsAt = Date.now();
 }
 
@@ -211,8 +230,8 @@ export function setSetting(key, value) {
   // verify through the same query the app reads with, so a duplicate row or a
   // write the database quietly dropped shows up as an error instead of a value
   // that looks saved and disappears a few seconds later.
-  const rows = db.prepare('SELECT key, value FROM settings WHERE key=?').all(key);
-  const got = rows.length ? String(rows[rows.length - 1].value) : null;
+  const rows = readSettingRows('SELECT key AS k, value AS v FROM settings WHERE key=?', [key]);
+  const got = rows.length ? rows[rows.length - 1][1] : null;
   if (got !== want) {
     _settings = null;
     throw new Error(`the database did not keep ${key} (wanted "${want}", it has "${got}"${rows.length > 1 ? `, ${rows.length} rows` : ''})`);
@@ -223,7 +242,13 @@ export function setSetting(key, value) {
 
 // what the database actually holds right now, cache bypassed
 export function getSettingFresh(key) {
-  const row = db.prepare('SELECT value FROM settings WHERE key=?').get(key);
-  return row ? row.value : null;
+  const rows = readSettingRows('SELECT key AS k, value AS v FROM settings WHERE key=?', [key]);
+  return rows.length ? rows[rows.length - 1][1] : null;
+}
+
+// how many settings the app can actually read back — used by the health check
+export function settingsReadCount() {
+  try { return readSettingRows('SELECT key AS k, value AS v FROM settings').length; }
+  catch { return -1; }
 }
 export function clearSettingsCache() { _settings = null; }
