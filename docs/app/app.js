@@ -144,36 +144,39 @@ function paintRates(d) {
   badge(d.stale ? 'stale' : (d.marketOpen === false ? 'closed' : 'live'));
 
   const gstPct = d.gstPct;
-  $('ratecard').innerHTML = (d.products || []).map(p => {
+  const rows = (d.products || []).map(p => {
     const prev = prevBuy[p.code];
     // green when the rate went up, red when it dropped; colour stays until it moves again
     let dir = dirBuy[p.code] || '';
     if (prev != null && p.buy !== prev) dir = p.buy > prev ? 'up' : 'dn';
     dirBuy[p.code] = dir;
     prevBuy[p.code] = p.buy;
-    const arrow = dir === 'up' ? ' ▲' : dir === 'dn' ? ' ▼' : '';
-    const oz = p.spotUsd ? '$' + p.spotUsd.toFixed(2) + '/oz' : '';
-    const cash = p.cash
-      ? `<div class="sm" style="margin-top:4px;font-variant-numeric:tabular-nums">
-           <span class="muted">cash</span> <b>${fmt(p.cash)}</b></div>`
-      : '';
-    return `<div class="rate row">
-      <div class="nm">${esc(p.name)}<small>per ${esc(p.unit)} · sell ${fmt(p.sell)}</small>
-        <small>${oz}</small></div>
-      <div style="text-align:right">
-        <div class="px ${dir}">${fmt(p.buy)}${arrow}<small class="muted">you buy · ex-GST</small></div>
-        <div class="sm" style="margin-top:4px;color:var(--gold-soft);font-variant-numeric:tabular-nums">
-          ${fmt(p.buyWithGst)} <span class="muted">inc ${gstPct}% GST</span></div>
-        ${cash}
-        <div class="btn2" style="margin-top:8px">
-          <button class="btn gold" style="padding:8px" data-buy="${esc(p.code)}">Buy</button>
-          <button class="btn" style="padding:8px" data-sell="${esc(p.code)}">Sell</button>
-        </div>
-      </div></div>`;
-  }).join('') || '<div class="muted sm">No products available.</div>';
+    const arrow = dir === 'up' ? ' <i>▲</i>' : dir === 'dn' ? ' <i>▼</i>' : '';
+    const oz   = p.spotUsd ? '$' + p.spotUsd.toFixed(2) : '<span class="none">—</span>';
+    const gst  = p.buyWithGst ? fmt(p.buyWithGst) : '<span class="none">—</span>';
+    const cash = p.cash ? fmt(p.cash) : '<span class="none">—</span>';
+    return `<tr class="r" data-row="${esc(p.code)}">
+      <td><span class="pname">${esc(p.name)}</span>
+          <span class="psub">per ${esc(p.unit)}</span></td>
+      <td class="main ${dir}">${fmt(p.buy)}${arrow}</td>
+      <td class="gst">${gst}</td>
+      <td class="fx">${oz}</td>
+      <td class="cash">${cash}</td>
+    </tr>`;
+  }).join('');
 
-  $('ratecard').querySelectorAll('[data-buy]').forEach(b => b.onclick = () => openTrade(b.dataset.buy, 'buy'));
-  $('ratecard').querySelectorAll('[data-sell]').forEach(b => b.onclick = () => openTrade(b.dataset.sell, 'sell'));
+  $('ratecard').innerHTML = rows
+    ? `<table class="rtable">
+         <thead><tr>
+           <th>Product</th><th>Without GST</th><th>With GST ${gstPct}%</th>
+           <th>Forex $/oz</th><th>Cash</th>
+         </tr></thead>
+         <tbody>${rows}</tbody>
+       </table>
+       <div class="muted sm" style="margin-top:10px">Tap any row to call and book. Rates are indicative; the price is fixed on the call.</div>`
+    : '<div class="muted sm">No products available.</div>';
+
+  $('ratecard').querySelectorAll('[data-row]').forEach(r => r.onclick = () => openTrade(r.dataset.row, 'buy'));
 
   const s = d.spot || {};
   $('spotline').innerHTML =

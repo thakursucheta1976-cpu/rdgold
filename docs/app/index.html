@@ -54,6 +54,30 @@ h2{font-size:17px;margin:4px 0 12px}
 .msg.err{background:#3a1d1b;color:#ffb4ad;border:1px solid #5c2b26}
 .msg.ok{background:#15301f;color:#9ee6bd;border:1px solid #235c3c}
 .msg.warn{background:#332a12;color:#ffd98a;border:1px solid #5b4a1d}
+/* rate table */
+.rtable{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.rtable th{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);
+  font-weight:600;text-align:right;padding:0 0 8px 6px}
+.rtable th:first-child{text-align:left;padding-left:0}
+.rtable td{padding:11px 0 11px 6px;border-top:1px solid var(--line);text-align:right;font-size:13.5px}
+.rtable td:first-child{text-align:left;padding-left:0;white-space:nowrap}
+.rtable tr.r{cursor:pointer}
+.rtable .pname{font-size:13.5px;font-weight:600;display:block}
+.rtable .psub{display:block;font-size:10.5px;color:var(--mut);font-weight:400}
+.rtable .main{font-size:15px;font-weight:700;white-space:nowrap}
+.rtable .main i{font-style:normal;font-size:10px;vertical-align:1px}
+.rtable .gst{color:var(--gold-soft);font-weight:600}
+.rtable .fx{color:var(--mut)}
+.rtable .cash{font-weight:700}
+.rtable .none{color:#4a5260}
+.rtable .up{color:var(--grn)}
+.rtable .dn{color:var(--red)}
+#ratecard{overflow-x:auto}
+@media (max-width:420px){
+  .rtable td{font-size:12.5px;padding:10px 0 10px 4px}
+  .rtable .main{font-size:14px}
+  .rtable th{font-size:9px;padding-left:4px}
+}
 nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:#0f0f12;
   border-top:1px solid var(--line);padding-bottom:var(--safe-b);z-index:10}
 nav button{flex:1;background:none;border:0;color:var(--mut);font-size:11px;padding:9px 2px 8px;cursor:pointer}
