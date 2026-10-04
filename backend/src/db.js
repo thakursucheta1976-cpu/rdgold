@@ -129,6 +129,7 @@ set.run('gst_pct', '3');
 set.run('global_spread_gold', '0');  // INR per 10g adjustment to track MCX
 set.run('global_spread_silver', '0');
 set.run('market_open', 'true');      // admin kill-switch
+set.run('dealer_phone', '');         // number clients call / WhatsApp to book
 set.run('bank_details', JSON.stringify({
   account_name: 'Your Bullion Pvt Ltd', account_no: '0000000000', ifsc: 'HDFC0000000',
   bank: 'HDFC Bank', branch: 'Mumbai', upi: '', whatsapp: '+91', phone: '+91'
@@ -146,6 +147,8 @@ seedProducts.run('SILVER999', 'Silver 999 (1kg)', 'silver', 0.999, '1kg', 1000, 
 const cols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
 if (!cols.includes('last_login'))  db.exec("ALTER TABLE users ADD COLUMN last_login TEXT");
 if (!cols.includes('login_count')) db.exec("ALTER TABLE users ADD COLUMN login_count INTEGER NOT NULL DEFAULT 0");
+if (!cols.includes('email'))       db.exec("ALTER TABLE users ADD COLUMN email TEXT");
+if (!cols.includes('address'))     db.exec("ALTER TABLE users ADD COLUMN address TEXT");
 
 export default db;
 // Settings are read many times per second (every rate tick, for every product).

@@ -270,5 +270,40 @@ ok('login preflight refused for unknown origin', evilpf.headers.get('access-cont
 let pubAny = await fetch(B+'/rates', { headers:{ Origin:'https://anything.example' } });
 ok('public rates still open to any origin', pubAny.headers.get('access-control-allow-origin') === '*');
 
+// ---- profile + dealer phone ----
+let cfg0 = await j(await get('/config'));
+ok('config endpoint public', typeof cfg0.dealerPhone === 'string' && typeof cfg0.bank === 'object');
+
+let setPh = await patch('/admin/settings', { dealer_phone: '+919876543210' }, adm.token);
+ok('admin can set dealer phone', setPh.status === 200);
+let badPh = await patch('/admin/settings', { dealer_phone: 'call-me' }, adm.token);
+ok('bad dealer phone rejected', badPh.status === 400);
+let cfg1 = await j(await get('/config'));
+ok('dealer phone published', cfg1.dealerPhone === '+919876543210');
+
+let prof = await j(await patch('/me', { name:'Updated Name', city:'Pune', email:'t@x.com',
+  pan:'ABCDE1234F', gst:'27ABCDE1234F1Z5', address:'Zaveri Bazaar' }, tok));
+ok('profile saved', prof.name === 'Updated Name' && prof.city === 'Pune' &&
+   prof.email === 't@x.com' && prof.address === 'Zaveri Bazaar');
+
+let blank = await patch('/me', { name:'' }, tok);
+ok('empty name rejected', blank.status === 400);
+let nothing = await patch('/me', {}, tok);
+ok('empty profile patch rejected', nothing.status === 400);
+
+let badPw = await patch('/me', { currentPassword:'wrong', newPassword:'newsecret1' }, tok);
+ok('password change needs the current password', badPw.status === 400);
+let shortPw = await patch('/me', { currentPassword:'secret12', newPassword:'123' }, tok);
+ok('short password rejected', shortPw.status === 400);
+let okPw = await patch('/me', { currentPassword:'secret12', newPassword:'newsecret1' }, tok);
+ok('password changed', okPw.status === 200);
+let reLogin = await post('/login', { phone:'9999990001', password:'newsecret1' });
+ok('login works with the new password', reLogin.status === 200);
+let oldLogin = await post('/login', { phone:'9999990001', password:'secret12' });
+ok('old password no longer works', oldLogin.status === 401);
+
+let noAuth = await fetch(B+'/me', { method:'PATCH', headers:{'Content-Type':'application/json'}, body:'{"name":"hacker"}' });
+ok('profile edit needs a token', noAuth.status === 401);
+
 console.log(fails === 0 ? '\nALL TESTS PASSED' : `\n${fails} FAILURES`);
 process.exit(fails === 0 ? 0 : 1);

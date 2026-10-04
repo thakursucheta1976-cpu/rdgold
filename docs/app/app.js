@@ -45,14 +45,14 @@ function note(el, text, kind) {
 }
 
 /* ---------------- views ---------------- */
-const VIEWS = ['auth', 'rates', 'orders', 'alerts', 'bank', 'admin'];
+const VIEWS = ['auth', 'rates', 'orders', 'alerts', 'profile', 'admin'];
 function show(v) {
   VIEWS.forEach(x => $('v-' + x).classList.toggle('hide', x !== v));
   $('nav').classList.toggle('hide', v === 'auth');
   [...document.querySelectorAll('#nav button')].forEach(b => b.classList.toggle('on', b.dataset.v === v));
   if (v === 'orders') loadOrders();
   if (v === 'alerts') loadAlerts();
-  if (v === 'bank')   loadBank();
+  if (v === 'profile') loadProfile();
   if (v === 'admin')  loadAdmin();
 }
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => show(b.dataset.v));
@@ -89,6 +89,7 @@ $('b-auth').onclick = async () => {
 
 async function afterSignIn(msg) {
   try { me = await api('/api/me'); } catch {}
+  loadConfig();
   $('navAdmin').classList.toggle('hide', !(me && me.role === 'admin'));
   show('rates');
   if (msg) note('ratemsg', msg, 'warn');
@@ -178,38 +179,12 @@ function paintRates(d) {
 
   $('ratecard').querySelectorAll('[data-row]').forEach(r => r.onclick = () => openTrade(r.dataset.row, 'buy'));
 
-  const s = d.spot || {};
-  $('spotline').innerHTML =
-    `Gold <b>$${s.xauusd ? s.xauusd.toFixed(2) : '—'}</b>/oz &nbsp;·&nbsp; ` +
-    `Silver <b>$${s.xagusd ? s.xagusd.toFixed(2) : '—'}</b>/oz &nbsp;·&nbsp; ` +
-    `USD/INR <b>${s.usdinr ? s.usdinr.toFixed(3) : '—'}</b>`;
-
-  // the feed can be perfectly live while the market is shut, so say which it is
-  const mv = d.moved, mb = $('movedline');
-  if (mb) {
-    const ms = mv ? mv.goldMsAgo : null;
-    if (ms == null) { mb.textContent = ''; }
-    else if (ms < 120000) { mb.innerHTML = '<span class="up">Prices moving now.</span>'; }
-    else {
-      const mins = Math.round(ms / 60000);
-      const txt = mins >= 60 ? Math.round(mins / 60) + 'h' : mins + 'm';
-      mb.innerHTML = '<span class="muted">No movement for ' + txt +
-        ' — the bullion market is closed. This is the last traded price.</span>';
-    }
-  }
-
-  const fx = d.fx;
-  if (fx && !fx.live) {
-    const hrs = fx.ageMs != null ? Math.round(fx.ageMs / 3600000) : null;
-    $('fxline').innerHTML = `<span class="dn">USD/INR is a daily reference rate${hrs != null ? ' (' + hrs + 'h old)' : ''}, not intraday.</span>`;
-  } else if (fx) {
-    $('fxline').textContent = 'Metals and USD/INR both live.';
-  } else $('fxline').textContent = '';
 }
 
 /* ---------------- booking (by phone) ----------------
    Rates are shown live. Orders are agreed on a call, not executed in the app. */
-const DEALER_PHONE = window.RDGOLD_PHONE || '+910000000000';
+let DEALER_PHONE = window.RDGOLD_PHONE || '';
+let BANK = {};
 const sheet = $('sheet'), sheetInner = $('sheetInner');
 function closeSheet() { sheet.classList.add('hide'); sheetInner.innerHTML = ''; }
 sheet.onclick = e => { if (e.target === sheet) closeSheet(); };
@@ -229,11 +204,15 @@ function openTrade(code, side) {
     <div class="kv" style="margin-top:10px"><span>Indicative value</span><b id="sh-val">${fmt(rate)}</b></div>
     <div class="msg warn" style="margin-top:10px">
       Indicative only. The rate is fixed with us on the call, not here.</div>
-    <a class="btn gold" id="sh-call" href="tel:${esc(DEALER_PHONE)}"
-       style="text-align:center;text-decoration:none">Call to book</a>
+    ${DEALER_PHONE
+      ? `<a class="btn gold" id="sh-call" href="tel:${esc(DEALER_PHONE)}"
+             style="text-align:center;text-decoration:none">Call to book</a>`
+      : `<div class="msg err">Dealer phone is not set yet.</div>`}
     <div style="height:9px"></div>
-    <a class="btn" id="sh-wa" target="_blank" rel="noopener"
-       style="text-align:center;text-decoration:none">Send on WhatsApp</a>
+    ${DEALER_PHONE
+      ? `<a class="btn" id="sh-wa" target="_blank" rel="noopener"
+             style="text-align:center;text-decoration:none">Send on WhatsApp</a>`
+      : ''}
     <div style="height:9px"></div>
     <button class="btn ghost" id="sh-close">Close</button>`;
 
@@ -242,7 +221,7 @@ function openTrade(code, side) {
     const q = parseFloat(qty.value) || 0;
     $('sh-val').textContent = fmt(rate * q);
     const msg = `${side === 'buy' ? 'Buy' : 'Sell'} ${q} ${p.unit} ${p.name} — indicative ${fmt(rate * q)} (rate ${fmt(rate)})`;
-    $('sh-wa').href = 'https://wa.me/' + DEALER_PHONE.replace(/[^0-9]/g, '') +
+    if ($('sh-wa')) $('sh-wa').href = 'https://wa.me/' + DEALER_PHONE.replace(/[^0-9]/g, '') +
                       '?text=' + encodeURIComponent(msg);
   };
   qty.oninput = refresh; refresh();
@@ -298,22 +277,58 @@ $('b-alert').onclick = async () => {
 };
 
 /* ---------------- more ---------------- */
-async function loadBank() {
-  if (me) {
-    $('m-name').textContent   = me.name || '—';
-    $('m-phone').textContent  = me.phone || '—';
-    $('m-status').textContent = me.status || '—';
-    $('m-margin').textContent = fmt(me.marginLimit);
-  }
+async function loadConfig() {
   try {
-    const b = await api('/api/bank-details', { auth: false });
-    const keys = Object.keys(b || {});
-    $('bank').innerHTML = keys.length
-      ? keys.map(k => `<div class="it row"><span class="muted">${esc(k)}</span><b>${esc(b[k])}</b></div>`).join('')
-      : '<div class="muted sm">Not published yet.</div>';
-  } catch { $('bank').innerHTML = '<div class="muted sm">Unavailable.</div>'; }
+    const c = await api('/api/config', { auth: false });
+    DEALER_PHONE = c.dealerPhone || DEALER_PHONE;
+    BANK = c.bank || {};
+  } catch {}
 }
 
+function loadProfile() {
+  const u = me || {};
+  $('p-phone').textContent  = u.phone  || '—';
+  $('p-margin').textContent = fmt(u.marginLimit);
+  $('p-since').textContent  = (u.createdAt || '').slice(0, 10) || '—';
+  const st = $('p-status');
+  st.textContent = u.status || '—';
+  st.className = 'pill' + (u.status === 'active' ? ' g' : u.status === 'blocked' ? ' r' : '');
+  $('p-name').value    = u.name    || '';
+  $('p-city').value    = u.city    || '';
+  $('p-email').value   = u.email   || '';
+  $('p-pan').value     = u.pan     || '';
+  $('p-gst').value     = u.gst     || '';
+  $('p-address').value = u.address || '';
+
+  const keys = Object.keys(BANK || {});
+  $('bank').innerHTML = keys.length
+    ? keys.map(k => `<div class="it row"><span class="muted">${esc(k.replace(/_/g, ' '))}</span><b>${esc(BANK[k])}</b></div>`).join('')
+    : '<div class="muted sm">Not published yet.</div>';
+}
+
+$('p-save').onclick = async () => {
+  $('p-save').disabled = true;
+  try {
+    me = await api('/api/me', { method: 'PATCH', body: {
+      name: $('p-name').value.trim(), city: $('p-city').value.trim(),
+      email: $('p-email').value.trim(), pan: $('p-pan').value.trim(),
+      gst: $('p-gst').value.trim(), address: $('p-address').value.trim() } });
+    note('profmsg', 'Details saved.', 'ok');
+  } catch (e) { note('profmsg', e.message); }
+  finally { $('p-save').disabled = false; }
+};
+
+$('p-pass').onclick = async () => {
+  const currentPassword = $('p-cur').value, newPassword = $('p-new').value;
+  if (!currentPassword || !newPassword) return note('profmsg', 'Fill both password fields.');
+  $('p-pass').disabled = true;
+  try {
+    await api('/api/me', { method: 'PATCH', body: { currentPassword, newPassword } });
+    $('p-cur').value = ''; $('p-new').value = '';
+    note('profmsg', 'Password updated.', 'ok');
+  } catch (e) { note('profmsg', e.message); }
+  finally { $('p-pass').disabled = false; }
+};
 
 /* ---------------- admin ---------------- */
 async function loadAdmin() {
@@ -368,6 +383,7 @@ async function loadAdmin() {
     const sv = settings || {};
     $('adm-cg').value   = (sv.cash_gold_rate && Number(sv.cash_gold_rate) > 0) ? sv.cash_gold_rate : '';
     $('adm-cs').value   = (sv.cash_silver_rate && Number(sv.cash_silver_rate) > 0) ? sv.cash_silver_rate : '';
+    $('adm-phone').value = sv.dealer_phone || '';
     $('adm-sg').value   = sv.global_spread_gold ?? '';
     $('adm-ss').value   = sv.global_spread_silver ?? '';
     $('adm-duty').value = sv.duty_pct ?? '';
@@ -398,6 +414,18 @@ async function adminUser(id, act) {
   } catch (e) { note('admmsg', e.message); }
 }
 
+$('adm-cash-save').onclick = async () => {
+  $('adm-cash-save').disabled = true;
+  try {
+    // blank means "stop showing a cash rate", so send 0 rather than skipping it
+    await api('/api/admin/settings', { method: 'PATCH', body: {
+      cash_gold_rate:   $('adm-cg').value === '' ? 0 : $('adm-cg').value,
+      cash_silver_rate: $('adm-cs').value === '' ? 0 : $('adm-cs').value } });
+    note('admmsg', 'Cash rates saved.', 'ok');
+  } catch (e) { note('admmsg', e.message); }
+  finally { $('adm-cash-save').disabled = false; }
+};
+
 $('adm-save').onclick = async () => {
   $('adm-save').disabled = true;
   try {
@@ -405,10 +433,9 @@ $('adm-save').onclick = async () => {
     const map = { 'adm-sg': 'global_spread_gold', 'adm-ss': 'global_spread_silver',
                   'adm-duty': 'duty_pct', 'adm-gst': 'gst_pct' };
     for (const k in map) if ($(k).value !== '') body[map[k]] = $(k).value;
-    // blank means "stop showing a cash rate", so send 0 rather than skipping it
-    body.cash_gold_rate   = $('adm-cg').value === '' ? 0 : $('adm-cg').value;
-    body.cash_silver_rate = $('adm-cs').value === '' ? 0 : $('adm-cs').value;
+    body.dealer_phone = $('adm-phone').value.trim();
     await api('/api/admin/settings', { method: 'PATCH', body });
+    DEALER_PHONE = body.dealer_phone || DEALER_PHONE;
     note('admmsg', 'Settings saved.', 'ok');
   } catch (e) { note('admmsg', e.message); }
   finally { $('adm-save').disabled = false; }

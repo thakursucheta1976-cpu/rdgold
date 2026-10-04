@@ -134,11 +134,6 @@ nav button.on{color:var(--gold-soft)}
   <section id="v-rates" class="hide">
     <div id="ratemsg"></div>
     <div class="card" id="ratecard"></div>
-    <div class="card">
-      <div class="row"><span class="tag">Spot</span><span class="sm muted" id="spotline">—</span></div>
-      <div class="sm" id="movedline" style="margin-top:8px"></div>
-      <div class="sm muted" id="fxline" style="margin-top:6px"></div>
-    </div>
   </section>
 
   <!-- ORDERS -->
@@ -165,28 +160,64 @@ nav button.on{color:var(--gold-soft)}
     <div class="card"><h2>Your alerts</h2><div id="alertlist" class="list"></div></div>
   </section>
 
-  <!-- MORE -->
-  <section id="v-bank" class="hide">
+  <!-- PROFILE -->
+  <section id="v-profile" class="hide">
+    <div id="profmsg"></div>
     <div class="card">
-      <h2>Bank transfer</h2>
-      <p class="sm muted" style="margin:0 0 10px">Transfer via RTGS/NEFT/IMPS to confirm bookings, then share the UTR on WhatsApp.</p>
-      <div class="kv"><span>Name</span><span id="m-name">—</span></div>
-      <div class="kv"><span>Phone</span><span id="m-phone">—</span></div>
-      <div class="kv"><span>Status</span><span id="m-status">—</span></div>
-      <div class="kv"><span>Margin limit</span><span id="m-margin">—</span></div>
+      <div class="row"><h2 style="margin:0">Profile</h2>
+        <span class="pill" id="p-status">—</span></div>
+      <div class="kv" style="margin-top:8px"><span>Phone</span><b id="p-phone">—</b></div>
+      <div class="kv"><span>Client since</span><span id="p-since">—</span></div>
+      <div class="kv"><span>Margin limit</span><span id="p-margin">—</span></div>
     </div>
-    <div class="card"><h2>Bank details</h2><div id="bank" class="list"></div></div>
+
+    <div class="card">
+      <h2>Your details</h2>
+      <label>Full name</label><input id="p-name">
+      <label>City</label><input id="p-city">
+      <label>Email</label><input id="p-email" inputmode="email">
+      <label>PAN</label><input id="p-pan">
+      <label>GST number</label><input id="p-gst">
+      <label>Address</label><input id="p-address">
+      <div style="height:12px"></div>
+      <button class="btn gold" id="p-save">Save details</button>
+    </div>
+
+    <div class="card">
+      <h2>Change password</h2>
+      <label>Current password</label><input id="p-cur" type="password" autocomplete="current-password">
+      <label>New password</label><input id="p-new" type="password" autocomplete="new-password">
+      <div style="height:12px"></div>
+      <button class="btn" id="p-pass">Update password</button>
+    </div>
+
+    <div class="card"><h2>Our bank details</h2>
+      <p class="sm muted" style="margin:0 0 10px">Pay by RTGS/NEFT/IMPS, then send the UTR on WhatsApp.</p>
+      <div id="bank" class="list"></div></div>
+
     <div class="card" id="installcard">
       <h2>Install RDgold</h2>
       <p class="sm muted" id="installtext" style="margin:0 0 12px">Add RDgold to your home screen.</p>
       <button class="btn" id="b-install">Add to home screen</button>
     </div>
+
     <button class="btn ghost" id="b-logout">Sign out</button>
+    <div style="height:10px"></div>
   </section>
 
   <!-- ADMIN -->
   <section id="v-admin" class="hide">
     <div id="admmsg"></div>
+
+    <div class="card">
+      <h2>Cash rate (you type this)</h2>
+      <p class="sm muted" style="margin:0 0 10px">Not fetched live. Leave blank to hide the cash column.</p>
+      <label>Cash gold rate (₹ per 10g, 999)</label><input id="adm-cg" inputmode="decimal" placeholder="e.g. 118900">
+      <label>Cash silver rate (₹ per kg)</label><input id="adm-cs" inputmode="decimal" placeholder="e.g. 148500">
+      <div style="height:12px"></div>
+      <button class="btn gold" id="adm-cash-save">Save cash rates</button>
+    </div>
+
     <div class="card">
       <div class="row"><h2 style="margin:0">Clients</h2><span class="sm muted" id="adm-count">—</span></div>
       <div id="adm-users" class="list" style="margin-top:8px"></div>
@@ -199,8 +230,7 @@ nav button.on{color:var(--gold-soft)}
         <span>Market</span>
         <button class="btn" style="width:auto;padding:8px 16px" id="adm-market">—</button>
       </div>
-      <label>Cash gold rate (₹ per 10g) — blank to hide</label><input id="adm-cg" inputmode="decimal">
-      <label>Cash silver rate (₹ per kg) — blank to hide</label><input id="adm-cs" inputmode="decimal">
+      <label>Dealer phone (clients call this)</label><input id="adm-phone" inputmode="tel" placeholder="+919876543210">
       <label>Gold spread (₹ per 10g)</label><input id="adm-sg" inputmode="decimal">
       <label>Silver spread (₹ per kg)</label><input id="adm-ss" inputmode="decimal">
       <label>Import duty %</label><input id="adm-duty" inputmode="decimal">
@@ -215,7 +245,7 @@ nav button.on{color:var(--gold-soft)}
   <button data-v="rates"  class="on"><span>₹</span>Rates</button>
   <button data-v="orders"><span>▤</span>Orders</button>
   <button data-v="alerts"><span>◔</span>Alerts</button>
-  <button data-v="bank"><span>▦</span>Bank</button>
+  <button data-v="profile"><span>☰</span>Profile</button>
   <button data-v="admin" id="navAdmin" class="hide"><span>⚙</span>Admin</button>
 </nav>
 

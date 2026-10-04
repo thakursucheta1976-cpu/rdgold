@@ -1,5 +1,5 @@
 // Cache the shell so the app opens offline; never cache API responses.
-const SHELL = 'rdgold-shell-v1';
+const SHELL = 'rdgold-shell-v2';
 const FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
